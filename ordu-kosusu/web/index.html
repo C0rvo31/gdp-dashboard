@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Ordu Koşusu</title>
+<style>
+:root{
+  --blue:#2f8cff; --blue-d:#1b5fd1; --red:#ff4b4b; --gold:#ffc83a; --gold-d:#e09a00;
+  --ink:#16233b; --panel:rgba(255,255,255,.94);
+  --safe-top:max(env(safe-area-inset-top),10px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Roboto,"Segoe UI",system-ui,sans-serif;color:var(--ink);touch-action:none}
+#game{position:fixed;inset:0}
+#game canvas{display:block;width:100%;height:100%}
+.ui{position:fixed;inset:0;pointer-events:none}
+.ui *{pointer-events:auto}
+.hidden{display:none!important}
+
+/* HUD */
+#hud{position:fixed;left:0;right:0;top:0;padding:var(--safe-top) 12px 0;display:flex;align-items:center;gap:10px;pointer-events:none}
+.pill{background:rgba(16,30,60,.55);color:#fff;border-radius:999px;padding:7px 14px;font-weight:900;font-size:15px;letter-spacing:.5px;display:flex;align-items:center;gap:7px;backdrop-filter:blur(4px)}
+.coin{width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff3b0,var(--gold) 45%,var(--gold-d));box-shadow:inset 0 -2px 0 rgba(0,0,0,.18)}
+#btnGear{width:40px;height:40px;border-radius:50%;border:0;background:rgba(16,30,60,.55);color:#fff;font-size:20px;display:grid;place-items:center;pointer-events:auto}
+#lvlWrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+#progress{width:min(60vw,260px);height:9px;border-radius:9px;background:rgba(16,30,60,.35);overflow:hidden}
+#progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,#7cf29a,#2fd36a);border-radius:9px}
+#bossBar{position:fixed;left:50%;transform:translateX(-50%);top:calc(var(--safe-top) + 64px);width:min(78vw,340px);text-align:center;color:#fff;font-weight:900;text-shadow:0 2px 0 rgba(0,0,0,.35);font-size:14px;letter-spacing:1px}
+#bossBar .bar{margin-top:5px;height:14px;border-radius:10px;background:rgba(40,0,0,.5);border:2px solid #fff;overflow:hidden}
+#bossBar .bar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#ff7a59,#ff2d44);transition:width .12s}
+
+#toast{position:fixed;left:50%;top:30%;transform:translate(-50%,-50%) scale(.6);opacity:0;font-weight:900;font-size:34px;color:#fff;text-shadow:0 3px 0 #1b5fd1,0 6px 14px rgba(0,0,0,.3);white-space:nowrap;pointer-events:none;transition:transform .25s cubic-bezier(.2,1.6,.4,1),opacity .25s}
+#toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+#toast.bad{text-shadow:0 3px 0 #b3202c,0 6px 14px rgba(0,0,0,.3)}
+
+/* Menu */
+#menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:calc(var(--safe-top) + 64px) 16px 22px;pointer-events:none}
+#title{text-align:center;pointer-events:none}
+#title h1{margin:0;font-size:clamp(40px,12vw,64px);line-height:.92;font-weight:900;color:#fff;letter-spacing:1px;
+  text-shadow:0 4px 0 var(--blue-d),0 8px 0 rgba(10,40,100,.35),0 12px 24px rgba(0,0,0,.25);transform:rotate(-3deg)}
+#title h1 span{color:var(--gold);text-shadow:0 4px 0 #c66d00,0 8px 0 rgba(90,40,0,.35),0 12px 24px rgba(0,0,0,.25)}
+#title p{margin:14px 0 0;font-weight:800;color:#fff;font-size:15px;text-shadow:0 2px 0 rgba(0,0,0,.3)}
+#bottom{width:100%;display:flex;flex-direction:column;align-items:center;gap:16px}
+#startHint{display:flex;flex-direction:column;align-items:center;gap:8px;color:#fff;font-weight:900;font-size:18px;text-shadow:0 2px 0 rgba(0,0,0,.35);pointer-events:none}
+.hand{width:64px;height:24px;position:relative}
+.hand::before{content:"";position:absolute;left:50%;top:0;width:26px;height:26px;margin-left:-13px;border-radius:50%;background:#fff;box-shadow:0 3px 0 rgba(0,0,0,.25);animation:swipe 1.6s ease-in-out infinite}
+.hand::after{content:"";position:absolute;left:0;right:0;top:11px;height:4px;border-radius:4px;background:rgba(255,255,255,.45)}
+@keyframes swipe{0%,100%{transform:translateX(-26px)}50%{transform:translateX(26px)}}
+#upgrades{display:flex;gap:10px;width:100%;max-width:440px}
+.up{flex:1;background:var(--panel);border-radius:18px;padding:10px 6px 8px;text-align:center;border:0;box-shadow:0 5px 0 rgba(10,30,70,.25);font-family:inherit;color:var(--ink);position:relative}
+.up:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(10,30,70,.25)}
+.up .ic{width:44px;height:44px;margin:0 auto 4px;border-radius:12px;display:grid;place-items:center}
+.up .ic svg{width:30px;height:30px}
+.up b{display:block;font-size:13px;font-weight:900}
+.up small{display:block;font-size:11px;font-weight:700;opacity:.6;margin-top:1px}
+.up .cost{margin-top:6px;display:flex;align-items:center;justify-content:center;gap:5px;font-weight:900;font-size:14px;background:#eaf2ff;border-radius:10px;padding:4px}
+.up .cost .coin{width:14px;height:14px}
+.up.poor .cost{opacity:.45}
+.up.max .cost{background:#e7f8ec}
+
+/* Panels */
+.overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(10,25,55,.35);padding:16px}
+.card{background:var(--panel);border-radius:26px;padding:26px 22px 22px;width:100%;max-width:360px;text-align:center;box-shadow:0 8px 0 rgba(10,30,70,.25),0 20px 50px rgba(0,0,0,.25);animation:pop .35s cubic-bezier(.2,1.5,.4,1)}
+@keyframes pop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
+.card h2{margin:0;font-size:40px;font-weight:900;letter-spacing:1px}
+.card h2.win{color:var(--blue);text-shadow:0 3px 0 #bcd8ff}
+.card h2.lose{color:var(--red);text-shadow:0 3px 0 #ffd0d0}
+.card .sub{font-weight:800;opacity:.65;margin:6px 0 16px}
+.reward{display:flex;align-items:center;justify-content:center;gap:10px;font-size:34px;font-weight:900;margin:4px 0 18px}
+.reward .coin{width:32px;height:32px}
+.stats{display:flex;gap:8px;margin-bottom:18px}
+.stats div{flex:1;background:#eef4ff;border-radius:14px;padding:8px 4px;font-weight:800;font-size:12px}
+.stats div b{display:block;font-size:20px;font-weight:900}
+.btn{display:block;width:100%;border:0;border-radius:18px;padding:16px;font-family:inherit;font-weight:900;font-size:22px;letter-spacing:1px;color:#fff;background:linear-gradient(#52a8ff,var(--blue));box-shadow:0 6px 0 var(--blue-d);margin-top:8px}
+.btn:active{transform:translateY(4px);box-shadow:0 2px 0 var(--blue-d)}
+.btn.green{background:linear-gradient(#5be38a,#26c060);box-shadow:0 6px 0 #179446}
+.btn.ghost{background:#e9eef8;color:var(--ink);box-shadow:0 5px 0 #c6d0e2;font-size:18px;padding:13px}
+.row{display:flex;align-items:center;justify-content:space-between;padding:12px 4px;border-bottom:1px solid #e3e9f3;font-weight:800;font-size:17px;text-align:left}
+.row small{display:block;font-size:12px;opacity:.55;font-weight:700}
+.tog{width:56px;height:32px;border-radius:20px;background:#cfd8e6;position:relative;border:0;flex:none;transition:background .2s}
+.tog::after{content:"";position:absolute;top:4px;left:4px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.2);transition:left .2s}
+.tog.on{background:#2fd36a}
+.tog.on::after{left:28px}
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<div class="ui">
+  <div id="hud">
+    <button id="btnGear" aria-label="Ayarlar">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3.2h-4l-.4 2.7a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1l.4 2.7h4l.4-2.7a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>
+    </button>
+    <div id="lvlWrap">
+      <div class="pill" id="lvlPill">SEVİYE 1</div>
+      <div id="progress"><i></i></div>
+    </div>
+    <div class="pill"><span class="coin"></span><span id="coins">0</span></div>
+  </div>
+
+  <div id="bossBar" class="hidden">DEV<div class="bar"><i></i></div></div>
+  <div id="toast"></div>
+
+  <div id="menu">
+    <div id="title">
+      <h1>ORDU<br><span>KOŞUSU</span></h1>
+      <p>Askerlerini topla, silahını güçlendir, devi yen!</p>
+    </div>
+    <div id="bottom">
+    <div id="startHint"><div class="hand"></div>BAŞLAMAK İÇİN KAYDIR</div>
+    <div id="upgrades">
+      <button class="up" data-up="upStart">
+        <div class="ic" style="background:#dcebff"><svg viewBox="0 0 24 24"><circle cx="12" cy="6.5" r="3.5" fill="#f2c39a"/><path d="M6 21v-6a6 6 0 0 1 12 0v6z" fill="#2f8cff"/><path d="M8.3 5.5a3.8 3.8 0 0 1 7.4 0z" fill="#1b5fd1"/></svg></div>
+        <b>ASKER</b><small>Başlangıç: <span data-v>1</span></small>
+        <div class="cost"><span class="coin"></span><span data-c>0</span></div>
+      </button>
+      <button class="up" data-up="upRate">
+        <div class="ic" style="background:#fff1d6"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" fill="#ffb020"/></svg></div>
+        <b>ATEŞ HIZI</b><small>Seviye <span data-v>1</span></small>
+        <div class="cost"><span class="coin"></span><span data-c>0</span></div>
+      </button>
+      <button class="up" data-up="upDmg">
+        <div class="ic" style="background:#ffe1e1"><svg viewBox="0 0 24 24"><path d="M3 9h12l2-2h3v4h-2v2h-5l-1 2h-3l-1 5H5l1-5H3z" fill="#e5484d"/></svg></div>
+        <b>GÜÇ</b><small>Seviye <span data-v>1</span></small>
+        <div class="cost"><span class="coin"></span><span data-c>0</span></div>
+      </button>
+    </div>
+    </div>
+  </div>
+
+  <div id="winPanel" class="overlay hidden">
+    <div class="card">
+      <h2 class="win">ZAFER!</h2>
+      <div class="sub" id="winSub">Seviye tamamlandı</div>
+      <div class="stats"><div>Kalan Asker<b id="wSold">0</b></div><div>Toplanan<b id="wColl">0</b></div></div>
+      <div class="reward"><span class="coin"></span>+<span id="wCoins">0</span></div>
+      <button class="btn green" id="btnNext">DEVAM</button>
+    </div>
+  </div>
+
+  <div id="losePanel" class="overlay hidden">
+    <div class="card">
+      <h2 class="lose">YENİLDİN</h2>
+      <div class="sub" id="loseSub">Ordun dağıldı!</div>
+      <div class="reward"><span class="coin"></span>+<span id="lCoins">0</span></div>
+      <button class="btn" id="btnRetry">TEKRAR DENE</button>
+    </div>
+  </div>
+
+  <div id="settings" class="overlay hidden">
+    <div class="card">
+      <h2 style="font-size:30px;margin-bottom:8px">AYARLAR</h2>
+      <div class="row"><div>Ses</div><button class="tog" data-set="sound"></button></div>
+      <div class="row"><div>Titreşim</div><button class="tog" data-set="vibe"></button></div>
+      <div class="row"><div>Pil Tasarrufu<small>30 FPS, daha düşük çözünürlük</small></div><button class="tog" data-set="eco"></button></div>
+      <button class="btn" id="btnCloseSet" style="margin-top:18px">TAMAM</button>
+      <button class="btn ghost" id="btnHome">ANA MENÜ</button>
+    </div>
+  </div>
+</div>
+<!--BUNDLE-->
+</body>
+</html>
