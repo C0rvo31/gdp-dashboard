@@ -93,13 +93,26 @@ function stairTop(z) { // world z -> height of the step surface under it
 // ============================================================ gems (bonus level)
 const GEM_MAX = 16;
 let gemGeo = null, gemMat = null;
-const GEMS = { mesh: null, n: 0, x: new Float32Array(GEM_MAX), z: new Float32Array(GEM_MAX), taken: new Uint8Array(GEM_MAX), spark: 0 };
+const GEMS = { mesh: null, n: 0, x: new Float32Array(GEM_MAX), z: new Float32Array(GEM_MAX), taken: new Uint8Array(GEM_MAX), tp: new Float32Array(GEM_MAX), spark: 0 };
 
 export function initBonus(ctx) {
   C = ctx;
   buildStairs();
-  gemGeo = new THREE.OctahedronGeometry(0.36, 0).scale(1, 1.35, 1);
-  gemMat = addRim(new THREE.MeshLambertMaterial({ color: 0xff5ad8, emissive: 0x7a1a66, flatShading: true }), 0.7);
+  // brilliant-cut gem: octagonal table, crown, girdle, pavilion; every facet gets its own shade
+  const pts = [[0, -0.52], [0.37, 0.02], [0.3, 0.14], [0.17, 0.26], [0, 0.26]].map(([r, y]) => new THREE.Vector2(r, y));
+  gemGeo = new THREE.LatheGeometry(pts, 8).toNonIndexed();
+  gemGeo.computeVertexNormals();
+  {
+    const n = gemGeo.attributes.position.count, col = new Float32Array(n * 3), c = new THREE.Color();
+    const sh = [0xff9af0, 0xff5ad8, 0xd02aae, 0xff7ae6, 0xb81e96, 0xff8cf0];
+    for (let f = 0; f < n / 3; f++) {
+      c.set(sh[(f * 7 + (f >> 2)) % sh.length]);
+      if (gemGeo.attributes.position.getY(f * 3) > 0.2 && gemGeo.attributes.position.getY(f * 3 + 1) > 0.2) c.set(0xffe0fb); // table
+      for (let v = 0; v < 3; v++) col.set([c.r, c.g, c.b], (f * 3 + v) * 3);
+    }
+    gemGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  }
+  gemMat = addRim(new THREE.MeshPhongMaterial({ vertexColors: true, emissive: 0x7a1a66, specular: 0xffffff, shininess: 90, flatShading: true }), 0.7);
   const s = document.querySelector('#splash small');
   if (s) splashDefault = s.textContent;
 }
@@ -161,7 +174,7 @@ export function bonusBuild(LV) {
   ST.group.visible = true;
   const n = Math.min(GEM_MAX, spec.gems.length);
   GEMS.n = n;
-  for (let i = 0; i < n; i++) { GEMS.x[i] = spec.gems[i].x; GEMS.z[i] = spec.gems[i].z; GEMS.taken[i] = 0; }
+  for (let i = 0; i < n; i++) { GEMS.x[i] = spec.gems[i].x; GEMS.z[i] = spec.gems[i].z; GEMS.taken[i] = 0; GEMS.tp[i] = -9; }
   if (n) {
     const m = new THREE.InstancedMesh(gemGeo, gemMat, n);
     m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -187,7 +200,7 @@ export function bonusTick(dt) {
     for (let i = 0; i < GEMS.n; i++) {
       if (GEMS.taken[i] || GEMS.z[i] > q.z + 0.5 || GEMS.z[i] < back - 0.3) continue;
       if (Math.abs(GEMS.x[i] - q.x) < d.hw + 0.3) {
-        GEMS.taken[i] = 1; S.runCoins += 10; S.collected++;
+        GEMS.taken[i] = 1; GEMS.tp[i] = t; S.runCoins += 10; S.collected++;
         C.burst(GEMS.x[i], 0.9, GEMS.z[i], 0xff5ad8, 10, 3.5, 0.6, 8, 5);
         C.floatText('+10', 'gold');
         C.sfx.play('coin'); C.vibrate(12);
@@ -198,12 +211,20 @@ export function bonusTick(dt) {
   const a = GEMS.mesh.instanceMatrix.array, c = Math.cos(t * 2.6), s = Math.sin(t * 2.6);
   let n = 0;
   for (let i = 0; i < GEMS.n; i++) {
-    if (GEMS.taken[i]) continue;
     const dz = GEMS.z[i] - q.z;
     if (dz < -16 || dz > 80) continue;
-    writeRy(a, n++ * 16, c, s, GEMS.x[i], 0.75 + Math.sin(t * 3 + i) * 0.12, GEMS.z[i], 1);
+    if (GEMS.taken[i]) { // collect pop
+      const u = (t - GEMS.tp[i]) / 0.32;
+      if (u < 0 || u >= 1) continue;
+      const a2 = t * 16;
+      writeRy(a, n++ * 16, Math.cos(a2), Math.sin(a2), GEMS.x[i], 0.9 + u * 0.9, GEMS.z[i], (1 + u * 0.8) * (1 - u * u));
+      continue;
+    }
+    const pu = 1 + Math.max(0, Math.sin(t * 5 + i * 2.1) - 0.7) * 0.5; // sparkle: brief swell
+    writeRy(a, n++ * 16, c, s, GEMS.x[i], 0.8 + Math.sin(t * 3 + i) * 0.12, GEMS.z[i], pu);
   }
   GEMS.mesh.count = n;
+  gemMat.emissive.setRGB(0.48 + Math.sin(t * 6) * 0.18, 0.1, 0.4 + Math.sin(t * 6) * 0.15);
   GEMS.mesh.instanceMatrix.needsUpdate = true;
   GEMS.spark += dt;
   if (GEMS.spark > 0.22 && n) {

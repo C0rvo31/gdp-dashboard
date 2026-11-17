@@ -2,7 +2,7 @@
 // Everything is vertex-coloured and merged so each prop family is one or two draw calls.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { tint, plain, addRim } from './models.js';
+import { tint, plain, addRim, buildGun, buildSoldier } from './models.js';
 
 const F = (g, hex) => tint(plain(g), hex);
 const M = (parts) => mergeGeometries(parts.filter(Boolean));
@@ -29,7 +29,7 @@ const STYLE = {
   jungle: { post: 0xe8dcc0, stripe: 0x3fa848, beam: 0x3a2a1a, light: 0xc8ff5a, light2: 0xfff2a0, cap: 0x8a9a78, pillar: 0x6f7f5c, top: 'grass',
     banner: 0x2f8a3a, banner2: 0xffc83a, pole: 0x6a4a2e, stone: 0x9aa08a, stone2: 0x7f8a74, floor: 0x8a9a6a, flame: [0xff8a2a, 0xffe07a] },
 };
-const st = (th) => STYLE[th.key] || STYLE.meadow;
+const st = (th) => (th && STYLE[th.key]) || STYLE.meadow;
 
 // ------------------------------------------------------------ gates
 // Frame for a gate centred at x=0 with posts at -half, 0, +half (panels hang between them).
@@ -120,15 +120,21 @@ export function coinGeo() {
   if (coinG) return coinG;
   const star = new THREE.Shape();
   for (let i = 0; i < 10; i++) {
-    const a = Math.PI / 2 + (i / 10) * Math.PI * 2, r = i % 2 ? 0.075 : 0.17;
+    const a = Math.PI / 2 + (i / 10) * Math.PI * 2, r = i % 2 ? 0.07 : 0.165;
     if (i) star.lineTo(Math.cos(a) * r, Math.sin(a) * r); else star.moveTo(Math.cos(a) * r, Math.sin(a) * r);
   }
   const sg = () => new THREE.ExtrudeGeometry(star, { depth: 0.03, bevelEnabled: false });
+  const face = () => [
+    F(new THREE.RingGeometry(0.2, 0.25, 22).translate(0, 0, 0.037), 0xe89a10),   // engraved inner groove
+    F(new THREE.CircleGeometry(0.2, 22).translate(0, 0, 0.036), 0xffcf3a)];
   coinG = M([
-    F(new THREE.CylinderGeometry(0.32, 0.32, 0.07, 22).rotateX(Math.PI / 2), 0xffb81f),
-    F(new THREE.TorusGeometry(0.3, 0.042, 6, 22).scale(1, 1, 1.1), 0xffd75a),
-    F(sg().translate(0, 0, 0.025), 0xfff0a0),
-    F(sg().rotateY(Math.PI).translate(0, 0, -0.025), 0xfff0a0)]);
+    F(new THREE.CylinderGeometry(0.32, 0.32, 0.07, 24).rotateX(Math.PI / 2), 0xffc22a),
+    F(new THREE.TorusGeometry(0.3, 0.05, 6, 24).scale(1, 1, 1.15), 0xfff0a0),         // bright raised rim
+    F(new THREE.TorusGeometry(0.255, 0.014, 4, 24).translate(0, 0, 0.034), 0xb86e00),
+    F(new THREE.TorusGeometry(0.255, 0.014, 4, 24).translate(0, 0, -0.034), 0xb86e00),
+    ...face(), ...face().map((g) => g.rotateY(Math.PI)),
+    F(sg().translate(0, 0, 0.034), 0xfffbe0),
+    F(sg().rotateY(Math.PI).translate(0, 0, -0.034), 0xfffbe0)]);
   return coinG;
 }
 
@@ -209,4 +215,52 @@ export function arenaProps(th, half) {
   solid.push(box(3.0, 1.1, 0.1, 0, 7.6, gz - 0.85, S.banner));
   glow.push(F(new THREE.OctahedronGeometry(0.45, 0).scale(1.6, 1, 0.3).translate(0, 7.6, gz - 0.95), S.banner2));
   return { solid: M(solid), glow: M(glow) };
+}
+
+// ------------------------------------------------------------ crate icons: floating weapon / soldier above a crate
+const ICON = { geo: {}, ring: null, mat: {} };
+function iconGeo(key) {
+  if (ICON.geo[key]) return ICON.geo[key];
+  let g, k;
+  if (key === 's') { g = buildSoldier(0); k = 1.1; } else { g = buildGun(+key.slice(1)); k = 2.5; }
+  g.computeBoundingBox();
+  const bb = g.boundingBox, c = bb.getCenter(new THREE.Vector3()), sz = bb.getSize(new THREE.Vector3());
+  g.translate(-c.x, -c.y, -c.z);
+  const m = Math.min(k, 1.9 / Math.max(sz.x, sz.z, 0.01));   // long weapons are shrunk to stay above the crate
+  g.scale(m, m, m);
+  g.userData.half = sz.y * m / 2;
+  return (ICON.geo[key] = g);
+}
+// create / refresh the floating model of a crate (b.kind 'weapon' -> gun of b.tier, 'soldier' -> figurine). Cheap to call.
+export function crateIcon(b) {
+  if (!b.mesh || b.kind === 'wall') return;
+  const key = b.kind === 'weapon' ? 'g' + (b.tier || 1) : 's';
+  if (b._ik === key) return;
+  b._ik = key;
+  const g = iconGeo(key), hh = g.userData.half;
+  if (!b._icon) {
+    if (!ICON.ring) {
+      ICON.ring = new THREE.TorusGeometry(0.62, 0.045, 5, 28).rotateX(Math.PI / 2);
+      for (const [k, c] of [['w', 0xffc83a], ['s', 0x4ad0ff]]) ICON.mat[k] = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+    }
+    const grp = new THREE.Group(), model = new THREE.Mesh(g, PMAT.solid), ring = new THREE.Mesh(ICON.ring, ICON.mat.w);
+    grp.add(model, ring); b.mesh.add(grp);
+    b._icon = { grp, model, ring };
+  }
+  const I = b._icon;
+  I.model.geometry = g;
+  I.ring.material = ICON.mat[b.kind === 'weapon' ? 'w' : 's'];
+  I.by = 0.75 + 0.3 + hh; I.ring.position.y = -(hh + 0.22);
+  I.grp.position.y = I.by;
+}
+// every frame: spin + bob + pulse the glow ring of live armed crates
+export function propsTick(blocks, t) {
+  for (const b of blocks) {
+    const I = b._icon;
+    if (!I || !b.alive) continue;
+    I.grp.rotation.y = t * 1.7 + b.z;
+    I.grp.position.y = I.by + Math.sin(t * 2.4 + b.z) * 0.09;
+    const p = 1 + Math.sin(t * 4 + b.z) * 0.08;
+    I.ring.scale.set(p, 1, p); I.ring.rotation.y = -t * 2;
+  }
 }
