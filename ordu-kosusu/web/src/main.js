@@ -133,6 +133,12 @@ const TEX = {};
   TEX.road = canvasTex(c); TEX.road.wrapS = TEX.road.wrapT = THREE.RepeatWrapping;
   TEX.road.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
+  // mowed grass stripes
+  c = makeCanvas(64, 64); x = c.getContext('2d');
+  x.fillStyle = '#8bd862'; x.fillRect(0, 0, 64, 32); x.fillStyle = '#7ccb56'; x.fillRect(0, 32, 64, 32);
+  for (let i = 0; i < 260; i++) { x.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,200,.10)' : 'rgba(0,60,0,.08)'; x.fillRect(Math.random() * 64, Math.random() * 64, 2, 3); }
+  TEX.grass = canvasTex(c); TEX.grass.wrapS = TEX.grass.wrapT = THREE.RepeatWrapping;
+
   // curb
   c = makeCanvas(64, 32); x = c.getContext('2d');
   x.fillStyle = '#ff4f5e'; x.fillRect(0, 0, 32, 32); x.fillStyle = '#ffffff'; x.fillRect(32, 0, 32, 32);
@@ -170,28 +176,37 @@ const TEX = {};
 })();
 
 // ============================================================ materials & geometry
+// Cartoon rim light injected into Lambert materials: one pow() per pixel, no extra passes.
+function addRim(mat, strength = 0.42) {
+  mat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>',
+      `outgoingLight += mix(diffuseColor.rgb, vec3(1.0), 0.55) * ${strength.toFixed(2)} * pow(1.0 - saturate(dot(geometryNormal, geometryViewDir)), 2.6);
+#include <opaque_fragment>`);
+  };
+  mat.customProgramCacheKey = () => 'rim' + strength.toFixed(2);
+  return mat;
+}
+
 const MAT = {
-  skin: new THREE.MeshLambertMaterial({ color: 0xf6c39b }),
-  pBody: new THREE.MeshLambertMaterial({ color: 0x2f8cff }),
-  pLeg: new THREE.MeshLambertMaterial({ color: 0x27436d }),
-  eBody: new THREE.MeshLambertMaterial({ color: 0xff4650 }),
-  eLeg: new THREE.MeshLambertMaterial({ color: 0x6a2232 }),
-  gun: new THREE.MeshLambertMaterial({ color: WEAPONS[0].gun }),
+  char: addRim(new THREE.MeshLambertMaterial({ vertexColors: true })),
+  gun: addRim(new THREE.MeshLambertMaterial({ vertexColors: true }), 0.3),
   shadow: new THREE.MeshBasicMaterial({ map: TEX.shadow, color: 0x0b1a33, transparent: true, opacity: 0.42, depthWrite: false }),
   road: new THREE.MeshLambertMaterial({ map: TEX.road }),
   curb: new THREE.MeshLambertMaterial({ map: TEX.curb }),
-  ground: new THREE.MeshLambertMaterial({ color: 0x84d35e }),
+  ground: new THREE.MeshLambertMaterial({ map: TEX.grass }),
   ground2: new THREE.MeshLambertMaterial({ color: 0x6fc24f }),
-  post: new THREE.MeshLambertMaterial({ color: 0xffffff }),
-  wood: new THREE.MeshLambertMaterial({ map: TEX.wood }),
+  post: addRim(new THREE.MeshLambertMaterial({ color: 0xffffff }), 0.25),
+  postBase: new THREE.MeshLambertMaterial({ color: 0x3c4458 }),
+  wood: addRim(new THREE.MeshLambertMaterial({ map: TEX.wood }), 0.25),
+  stone: addRim(new THREE.MeshLambertMaterial({ color: 0xe2dccf }), 0.25),
   metal: new THREE.MeshLambertMaterial({ color: 0xd5dce6 }),
-  hub: new THREE.MeshLambertMaterial({ color: 0xff4650 }),
   slot: new THREE.MeshBasicMaterial({ color: 0x3c4458 }),
-  coin: new THREE.MeshLambertMaterial({ color: 0xffc83a, emissive: 0x6a4300 }),
+  coin: addRim(new THREE.MeshLambertMaterial({ color: 0xffc83a, emissive: 0x6a4300 }), 0.5),
   bullet: new THREE.MeshBasicMaterial({ color: WEAPONS[0].bullet }),
   particle: new THREE.MeshLambertMaterial({ color: 0xffffff }),
   checker: new THREE.MeshLambertMaterial({ map: TEX.checker }),
-  decor: new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }),
+  decor: addRim(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), 0.3),
+  cloud: new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x8fa6bf, flatShading: true, fog: false }),
 };
 
 function tint(geo, hex) {
@@ -200,50 +215,229 @@ function tint(geo, hex) {
   geo.setAttribute('color', new THREE.BufferAttribute(a, 3));
   return geo;
 }
-function plain(geo) { // strip to position+normal for merging
+// flat-shaded decor: non-indexed, position+normal+color
+function plain(geo) {
   const g = geo.index ? geo.toNonIndexed() : geo;
   for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'color') g.deleteAttribute(k);
   return g;
 }
+// smooth character parts: indexed, position+normal+color
+function prep(geo, hex) {
+  if (geo.attributes.uv) geo.deleteAttribute('uv');
+  return tint(geo, hex);
+}
+const V = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+const Y_UP = new THREE.Vector3(0, 1, 0);
+function rod(a, b, r0, r1, hex, seg = 8) { // tapered cylinder from point a to point b
+  const A = V(a), Bv = V(b), d = Bv.clone().sub(A), len = d.length();
+  const g = new THREE.CylinderGeometry(r1, r0, len, seg, 1);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y_UP, d.normalize()));
+  g.translate((A.x + Bv.x) / 2, (A.y + Bv.y) / 2, (A.z + Bv.z) / 2);
+  return prep(g, hex);
+}
+function box(w, h, d, x, y, z, hex, rx = 0, ry = 0, rz = 0) {
+  const g = new THREE.BoxGeometry(w, h, d);
+  if (rx) g.rotateX(rx); if (ry) g.rotateY(ry); if (rz) g.rotateZ(rz);
+  g.translate(x, y, z);
+  return prep(g, hex);
+}
+function ball(r, x, y, z, hex, ws = 10, hs = 8, sx = 1, sy = 1, sz = 1) {
+  const g = new THREE.SphereGeometry(r, ws, hs); g.scale(sx, sy, sz); g.translate(x, y, z);
+  return prep(g, hex);
+}
+function dome(r, x, y, z, hex, ws = 14, hs = 7, sx = 1, sy = 1, sz = 1, cut = 0.52) {
+  const g = new THREE.SphereGeometry(r, ws, hs, 0, Math.PI * 2, 0, Math.PI * cut); g.scale(sx, sy, sz); g.translate(x, y, z);
+  return prep(g, hex);
+}
+function cyl(rt, rb, h, x, y, z, hex, seg = 12, rx = 0, rz = 0, sz = 1) {
+  const g = new THREE.CylinderGeometry(rt, rb, h, seg); g.scale(1, 1, sz);
+  if (rx) g.rotateX(rx); if (rz) g.rotateZ(rz);
+  g.translate(x, y, z);
+  return prep(g, hex);
+}
+function cone(r, h, x, y, z, hex, rx = 0, rz = 0, seg = 8) {
+  const g = new THREE.ConeGeometry(r, h, seg); if (rx) g.rotateX(rx); if (rz) g.rotateZ(rz); g.translate(x, y, z);
+  return prep(g, hex);
+}
+
+const SKIN = 0xf6c39b;
+function buildSoldier() {
+  const C = { main: 0x2f8cff, vest: 0x1f63c9, pocket: 0x1a55ad, helm: 0x2369d6, belt: 0x3a2f28, gold: 0xffc83a,
+    pack: 0x3d6db8, packDark: 0x2c5596, roll: 0x9a7650, eye: 0x1a1a24, nose: 0xeaa882 };
+  const sh = [0.168, 0.81, 0];
+  const p = [
+    (() => { const g = new THREE.CapsuleGeometry(0.165, 0.2, 4, 12); g.scale(1, 1, 0.8); g.translate(0, 0.66, 0); return prep(g, C.main); })(),
+    box(0.29, 0.2, 0.05, 0, 0.69, 0.118, C.vest),
+    box(0.075, 0.06, 0.03, -0.07, 0.64, 0.148, C.pocket), box(0.075, 0.06, 0.03, 0.07, 0.64, 0.148, C.pocket),
+    cyl(0.17, 0.17, 0.05, 0, 0.5, 0, C.belt, 12, 0, 0, 0.82),
+    box(0.055, 0.042, 0.02, 0, 0.5, 0.142, C.gold),
+    box(0.24, 0.27, 0.12, 0, 0.69, -0.17, C.pack), box(0.25, 0.07, 0.135, 0, 0.8, -0.17, C.packDark),
+    rod([-0.14, 0.87, -0.16], [0.14, 0.87, -0.16], 0.048, 0.048, C.roll, 8),
+    ball(0.075, -sh[0], sh[1], 0, C.main, 8, 6), ball(0.075, sh[0], sh[1], 0, C.main, 8, 6),
+    // right arm -> grip, left arm -> forend
+    rod(sh, [0.18, 0.67, 0.09], 0.047, 0.043, C.main), rod([0.18, 0.67, 0.09], [0.09, 0.72, 0.21], 0.043, 0.038, C.main),
+    rod([-0.168, 0.81, 0], [-0.13, 0.68, 0.17], 0.047, 0.043, C.main), rod([-0.13, 0.68, 0.17], [0.03, 0.73, 0.35], 0.043, 0.038, C.main),
+    ball(0.043, 0.09, 0.72, 0.22, SKIN, 8, 6), ball(0.043, 0.035, 0.735, 0.36, SKIN, 8, 6),
+    // head
+    ball(0.135, 0, 0.955, 0, SKIN, 14, 12),
+    ball(0.03, -0.132, 0.95, 0, SKIN, 6, 5), ball(0.03, 0.132, 0.95, 0, SKIN, 6, 5),
+    ball(0.021, -0.046, 0.965, 0.123, C.eye, 6, 5), ball(0.021, 0.046, 0.965, 0.123, C.eye, 6, 5),
+    ball(0.022, 0, 0.94, 0.135, C.nose, 6, 5),
+    dome(0.165, 0, 0.985, 0, C.helm, 14, 7, 1, 0.9, 1.06),
+    cyl(0.178, 0.184, 0.03, 0, 0.985, 0, C.helm, 14),
+    box(0.05, 0.05, 0.02, 0, 1.06, 0.148, C.gold, 0.5),
+  ];
+  return mergeGeometries(p);
+}
+function buildRaider() {
+  const C = { main: 0xff4a54, strap: 0x3a2228, belt: 0x2b2024, metal: 0xd8dee6, mask: 0x26222c, helm: 0xb9232f,
+    horn: 0xf3ecdc, club: 0x9a6a3a, eye: 0x1a1a24 };
+  const sh = [0.168, 0.81, 0];
+  const p = [
+    (() => { const g = new THREE.CapsuleGeometry(0.17, 0.2, 4, 12); g.scale(1.05, 1, 0.82); g.translate(0, 0.66, 0); return prep(g, C.main); })(),
+    box(0.05, 0.36, 0.03, 0, 0.67, 0.135, C.strap, 0, 0, 0.6), box(0.05, 0.36, 0.03, 0, 0.67, 0.137, C.strap, 0, 0, -0.6),
+    cyl(0.176, 0.176, 0.06, 0, 0.5, 0, C.belt, 12, 0, 0, 0.82),
+    box(0.06, 0.05, 0.02, 0, 0.5, 0.146, C.metal),
+    // shoulder pads with spikes
+    dome(0.095, -0.17, 0.8, 0, C.strap, 10, 5, 1, 0.75, 1), dome(0.095, 0.17, 0.8, 0, C.strap, 10, 5, 1, 0.75, 1),
+    cone(0.025, 0.09, -0.19, 0.89, 0, C.metal, 0, 0.5), cone(0.025, 0.09, 0.19, 0.89, 0, C.metal, 0, -0.5),
+    // right arm raised with club, left arm fist
+    rod(sh, [0.25, 0.71, 0.07], 0.05, 0.045, C.main), rod([0.25, 0.71, 0.07], [0.21, 0.86, 0.17], 0.045, 0.04, C.main),
+    ball(0.046, 0.21, 0.87, 0.18, SKIN, 8, 6),
+    rod([0.21, 0.82, 0.16], [0.17, 1.22, 0.3], 0.024, 0.06, C.club),
+    ball(0.062, 0.17, 1.22, 0.3, C.club, 8, 6),
+    rod([-0.168, 0.81, 0], [-0.23, 0.68, 0.07], 0.05, 0.045, C.main), rod([-0.23, 0.68, 0.07], [-0.16, 0.62, 0.19], 0.045, 0.04, C.main),
+    ball(0.048, -0.16, 0.62, 0.2, SKIN, 8, 6),
+    // head: bandit mask, angry brows
+    ball(0.135, 0, 0.955, 0, SKIN, 14, 12),
+    cyl(0.139, 0.135, 0.08, 0, 0.9, 0, C.mask, 14),
+    ball(0.022, -0.046, 0.97, 0.123, C.eye, 6, 5), ball(0.022, 0.046, 0.97, 0.123, C.eye, 6, 5),
+    box(0.06, 0.016, 0.012, -0.047, 1.0, 0.127, C.eye, 0, 0, -0.45), box(0.06, 0.016, 0.012, 0.047, 1.0, 0.127, C.eye, 0, 0, 0.45),
+    dome(0.163, 0, 0.99, 0, C.helm, 14, 7, 1, 0.92, 1.04),
+    cyl(0.17, 0.175, 0.035, 0, 0.99, 0, C.strap, 14),
+    cone(0.038, 0.17, -0.17, 1.08, 0, C.horn, 0, 0.95), cone(0.038, 0.17, 0.17, 1.08, 0, C.horn, 0, -0.95),
+  ];
+  return mergeGeometries(p);
+}
+function buildLeg(pants, boot) {
+  return mergeGeometries([
+    box(0.112, 0.3, 0.12, 0, -0.15, 0, pants),
+    box(0.122, 0.13, 0.185, 0, -0.365, 0.028, boot),
+    box(0.124, 0.03, 0.19, 0, -0.42, 0.028, 0x1b1714),
+  ]);
+}
+function buildGuns() {
+  const X = 0.07, Y = 0.735;
+  const dark = 0x2f333d, black = 0x17191e, wood = 0x8a5a2b;
+  return [
+    // pistol
+    [box(0.05, 0.06, 0.2, X, Y + 0.01, 0.27, dark), box(0.045, 0.1, 0.05, X, Y - 0.05, 0.2, black, -0.25),
+      box(0.03, 0.02, 0.03, X, Y + 0.05, 0.35, black)],
+    // rifle
+    [box(0.05, 0.085, 0.16, X, Y - 0.01, 0.1, wood), box(0.06, 0.075, 0.22, X, Y, 0.28, dark),
+      box(0.055, 0.06, 0.16, X, Y - 0.005, 0.47, wood), rod([X, Y + 0.01, 0.54], [X, Y + 0.01, 0.72], 0.016, 0.014, black, 6),
+      box(0.04, 0.11, 0.05, X, Y - 0.08, 0.33, black, 0.25), rod([X, Y + 0.065, 0.22], [X, Y + 0.065, 0.38], 0.022, 0.022, black, 8),
+      cyl(0.03, 0.03, 0.02, X, Y + 0.065, 0.38, 0x7fd3ff, 8, Math.PI / 2)],
+    // smg
+    [box(0.045, 0.07, 0.14, X, Y - 0.005, 0.1, black), box(0.075, 0.095, 0.3, X, Y, 0.31, 0x2a2e36),
+      box(0.03, 0.02, 0.26, X, Y + 0.058, 0.31, black), rod([X, Y + 0.01, 0.46], [X, Y + 0.01, 0.74], 0.022, 0.022, black, 8),
+      cyl(0.034, 0.034, 0.06, X, Y + 0.01, 0.74, black, 8, Math.PI / 2),
+      cyl(0.065, 0.065, 0.055, X, Y - 0.07, 0.3, 0x4a505c, 14, 0, Math.PI / 2), box(0.04, 0.08, 0.04, X, Y - 0.07, 0.48, black, -0.3)],
+    // plasma
+    [box(0.085, 0.1, 0.34, X, Y, 0.3, 0xe9f1ff), box(0.06, 0.04, 0.3, X, Y + 0.065, 0.3, 0x1d9bf0),
+      rod([X, Y + 0.0, 0.46], [X, Y, 0.76], 0.034, 0.028, 0x1d9bf0, 10),
+      (() => { const g = new THREE.TorusGeometry(0.052, 0.014, 6, 14); g.translate(X, Y, 0.56); return prep(g, 0x6ff7ff); })(),
+      (() => { const g = new THREE.TorusGeometry(0.052, 0.014, 6, 14); g.translate(X, Y, 0.65); return prep(g, 0x6ff7ff); })(),
+      ball(0.04, X, Y, 0.78, 0x9ffcff, 10, 8), box(0.087, 0.03, 0.12, X, Y - 0.02, 0.2, 0x6ff7ff),
+      box(0.04, 0.09, 0.05, X, Y - 0.08, 0.22, 0x2a2e36, 0.25)],
+    // rocket launcher
+    [rod([X, Y + 0.04, -0.04], [X, Y + 0.04, 0.72], 0.075, 0.075, 0x557f3f, 12),
+      cyl(0.086, 0.086, 0.06, X, Y + 0.04, 0.7, 0x2f4a24, 12, Math.PI / 2), cyl(0.086, 0.086, 0.06, X, Y + 0.04, -0.02, 0x2f4a24, 12, Math.PI / 2),
+      cone(0.058, 0.15, X, Y + 0.04, 0.8, 0xff4a3a, Math.PI / 2, 0, 10),
+      box(0.03, 0.06, 0.06, X - 0.08, Y + 0.08, 0.3, black), box(0.04, 0.1, 0.05, X, Y - 0.06, 0.24, black, 0.2),
+      box(0.15, 0.025, 0.08, X, Y + 0.04, 0.45, 0xffc83a, 0, 0, 0)],
+  ].map((parts) => mergeGeometries(parts));
+}
 
 const G = {};
 (function buildGeometry() {
-  const torso = new THREE.CapsuleGeometry(0.17, 0.2, 3, 10); torso.scale(1, 1, 0.82); torso.translate(0, 0.66, 0);
-  const helmet = new THREE.SphereGeometry(0.165, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.5); helmet.translate(0, 0.99, 0);
-  const brim = new THREE.CylinderGeometry(0.2, 0.2, 0.035, 12); brim.translate(0, 0.99, 0);
-  const armR = new THREE.BoxGeometry(0.09, 0.09, 0.3); armR.rotateY(-0.2); armR.translate(0.15, 0.74, 0.12);
-  const armL = new THREE.BoxGeometry(0.09, 0.09, 0.34); armL.rotateY(0.45); armL.translate(-0.07, 0.73, 0.17);
-  G.body = mergeGeometries([torso, helmet, brim, armR, armL].map(plain));
-  G.head = new THREE.SphereGeometry(0.135, 12, 8); G.head.translate(0, 0.96, 0);
-  G.leg = new THREE.BoxGeometry(0.11, 0.42, 0.13); G.leg.translate(0, -0.21, 0);
-  G.guns = WEAPONS.map((w) => { const g = new THREE.BoxGeometry(0.075, 0.095, w.len); g.translate(0.05, 0.75, 0.16 + w.len / 2); return g; });
+  G.soldier = buildSoldier();
+  G.raider = buildRaider();
+  G.legP = buildLeg(0x2a3f66, 0x3a2b22);
+  G.legE = buildLeg(0x4a1d29, 0x2b1d18);
+  G.guns = buildGuns();
   G.shadow = new THREE.PlaneGeometry(0.62, 0.62); G.shadow.rotateX(-Math.PI / 2); G.shadow.translate(0, 0.012, 0);
   G.bullet = new THREE.BoxGeometry(0.08, 0.08, 0.55);
   G.particle = new THREE.BoxGeometry(0.16, 0.16, 0.16);
   G.coin = new THREE.CylinderGeometry(0.32, 0.32, 0.08, 18); G.coin.rotateX(Math.PI / 2);
 
   // decor (vertex coloured, flat shaded)
-  const trunk = () => tint(plain(new THREE.CylinderGeometry(0.12, 0.17, 0.9, 6).translate(0, 0.45, 0)), 0x8a5a33);
+  const F = (geo, hex) => tint(plain(geo), hex);
+  const trunk = () => F(new THREE.CylinderGeometry(0.11, 0.18, 0.95, 6).translate(0, 0.47, 0), 0x8a5a33);
   G.tree1 = mergeGeometries([
     trunk(),
-    tint(plain(new THREE.IcosahedronGeometry(0.95, 0).translate(0, 1.55, 0)), 0x4fb848),
-    tint(plain(new THREE.IcosahedronGeometry(0.6, 0).translate(0.35, 2.15, 0.1)), 0x66cc55),
+    F(new THREE.IcosahedronGeometry(0.9, 0).translate(0, 1.5, 0), 0x4fb848),
+    F(new THREE.IcosahedronGeometry(0.62, 0).translate(0.45, 1.95, 0.15), 0x63c752),
+    F(new THREE.IcosahedronGeometry(0.55, 0).translate(-0.4, 2.0, -0.1), 0x58bf4c),
+    F(new THREE.IcosahedronGeometry(0.5, 0).translate(0.05, 2.35, 0), 0x76d65e),
   ]);
   G.tree2 = mergeGeometries([
     trunk(),
-    tint(plain(new THREE.ConeGeometry(0.95, 1.4, 7).translate(0, 1.4, 0)), 0x2f9f5a),
-    tint(plain(new THREE.ConeGeometry(0.7, 1.1, 7).translate(0, 2.1, 0)), 0x3cb46a),
+    F(new THREE.ConeGeometry(1.0, 1.2, 7).translate(0, 1.25, 0), 0x2b9656),
+    F(new THREE.ConeGeometry(0.8, 1.05, 7).translate(0, 1.85, 0), 0x34a862),
+    F(new THREE.ConeGeometry(0.55, 0.9, 7).translate(0, 2.4, 0), 0x45bd70),
   ]);
-  G.rock = tint(plain(new THREE.DodecahedronGeometry(0.55, 0).scale(1.3, 0.7, 1).translate(0, 0.2, 0)), 0xb8c0cc);
+  G.tree3 = mergeGeometries([ // fruit tree
+    F(new THREE.CylinderGeometry(0.1, 0.16, 0.85, 6).translate(0, 0.42, 0), 0x7a4e2c),
+    F(new THREE.DodecahedronGeometry(0.85, 0).scale(1.1, 0.85, 1.1).translate(0, 1.45, 0), 0x5cc24c),
+    ...[[0.55, 1.3, 0.5], [-0.5, 1.6, 0.45], [0.2, 1.95, 0.55], [-0.15, 1.15, 0.75], [0.6, 1.7, -0.3]].map(
+      (q) => F(new THREE.IcosahedronGeometry(0.11, 0).translate(q[0], q[1], q[2]), 0xff5a4f)),
+  ]);
+  G.rock = mergeGeometries([
+    F(new THREE.DodecahedronGeometry(0.55, 0).scale(1.3, 0.7, 1).translate(0, 0.2, 0), 0xb8c0cc),
+    F(new THREE.DodecahedronGeometry(0.3, 0).scale(1.2, 0.8, 1).translate(0.6, 0.12, 0.25), 0xa3acba),
+  ]);
   G.bush = mergeGeometries([
-    tint(plain(new THREE.IcosahedronGeometry(0.5, 0).translate(0, 0.3, 0)), 0x5cc24c),
-    tint(plain(new THREE.IcosahedronGeometry(0.38, 0).translate(0.45, 0.25, 0.1)), 0x74d15a),
-    tint(plain(new THREE.IcosahedronGeometry(0.12, 0).translate(0.1, 0.72, 0.2)), 0xff6fa8),
+    F(new THREE.IcosahedronGeometry(0.5, 0).translate(0, 0.3, 0), 0x5cc24c),
+    F(new THREE.IcosahedronGeometry(0.38, 0).translate(0.45, 0.25, 0.1), 0x74d15a),
+    F(new THREE.IcosahedronGeometry(0.34, 0).translate(-0.4, 0.22, -0.05), 0x6ac955),
+    F(new THREE.IcosahedronGeometry(0.1, 0).translate(0.1, 0.72, 0.2), 0xff6fa8),
+    F(new THREE.IcosahedronGeometry(0.09, 0).translate(-0.35, 0.5, 0.25), 0xfff07a),
   ]);
+  const flower = (petal) => {
+    const parts = [F(new THREE.CylinderGeometry(0.015, 0.015, 0.3, 4).translate(0, 0.15, 0), 0x3f9a3a),
+      F(new THREE.IcosahedronGeometry(0.045, 0).translate(0, 0.31, 0), 0xffd23a)];
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      parts.push(F(new THREE.IcosahedronGeometry(0.05, 0).scale(1, 0.5, 1).translate(Math.cos(a) * 0.075, 0.305, Math.sin(a) * 0.075), petal));
+    }
+    return parts;
+  };
+  // a small patch of 4 flowers
+  const patch = (cols) => mergeGeometries(cols.flatMap((c, i) => flower(c).map((g) => g.translate([0, 0.35, -0.3, 0.15][i], 0, [0, 0.2, 0.25, -0.35][i]))));
+  G.flowers1 = patch([0xff7eb6, 0xffffff, 0xff7eb6, 0xffffff]);
+  G.flowers2 = patch([0xb98cff, 0xfff27a, 0xffffff, 0xb98cff]);
+  G.fence = mergeGeometries([
+    F(new THREE.BoxGeometry(0.12, 0.7, 0.12).translate(0, 0.35, 0), 0xf4ede0),
+    F(new THREE.ConeGeometry(0.09, 0.12, 4).rotateY(Math.PI / 4).translate(0, 0.76, 0), 0xf4ede0),
+    F(new THREE.BoxGeometry(0.05, 0.09, 2.0).translate(0, 0.28, 1.0), 0xe8dfcf),
+    F(new THREE.BoxGeometry(0.05, 0.09, 2.0).translate(0, 0.52, 1.0), 0xe8dfcf),
+  ]);
+  G.cloud = mergeGeometries([
+    plain(new THREE.IcosahedronGeometry(2.2, 1)),
+    plain(new THREE.IcosahedronGeometry(1.7, 1).translate(2.4, -0.3, 0.2)),
+    plain(new THREE.IcosahedronGeometry(1.6, 1).translate(-2.3, -0.4, -0.1)),
+    plain(new THREE.IcosahedronGeometry(1.3, 1).translate(0.9, 1.1, 0.3)),
+  ]).scale(1, 0.62, 0.8);
 
   // saw blade
   const parts = [tint(plain(new THREE.CylinderGeometry(0.9, 0.9, 0.1, 28).rotateX(Math.PI / 2)), 0xd5dce6),
+    tint(plain(new THREE.CylinderGeometry(0.6, 0.6, 0.12, 28).rotateX(Math.PI / 2)), 0xbfc8d4),
     tint(plain(new THREE.CylinderGeometry(0.28, 0.28, 0.2, 14).rotateX(Math.PI / 2)), 0xff4650)];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    parts.push(tint(plain(new THREE.CylinderGeometry(0.07, 0.07, 0.14, 8).rotateX(Math.PI / 2).translate(Math.cos(a) * 0.43, Math.sin(a) * 0.43, 0)), 0x7d8796));
+  }
   for (let i = 0; i < 14; i++) {
     const a = (i / 14) * Math.PI * 2;
     const t = new THREE.ConeGeometry(0.13, 0.32, 4).rotateZ(-Math.PI / 2 + 0.35);
@@ -251,6 +445,11 @@ const G = {};
     parts.push(tint(plain(t), 0xaeb7c4));
   }
   G.saw = mergeGeometries(parts);
+  G.sawPost = mergeGeometries([
+    tint(plain(new THREE.BoxGeometry(0.35, 1.0, 0.5).translate(0, 0.5, 0)), 0xffc83a),
+    tint(plain(new THREE.BoxGeometry(0.37, 0.18, 0.52).translate(0, 0.3, 0)), 0x23262e),
+    tint(plain(new THREE.BoxGeometry(0.37, 0.18, 0.52).translate(0, 0.7, 0)), 0x23262e),
+  ]);
 })();
 
 // ============================================================ instanced troop renderer
@@ -268,7 +467,7 @@ function wLeg(a, o, c, s, cb, sb, x, y, z, k) {
 }
 
 class Troop {
-  constructor(max, bodyMat, legMat, withGun) {
+  constructor(max, bodyGeo, legGeo, withGun) {
     this.max = max; this.n = 0;
     const mk = (geo, mat) => {
       const m = new THREE.InstancedMesh(geo, mat, max);
@@ -277,12 +476,11 @@ class Troop {
       return m;
     };
     this.shadow = mk(G.shadow, MAT.shadow);
-    this.body = mk(G.body, bodyMat);
-    this.head = mk(G.head, MAT.skin);
-    this.legL = mk(G.leg, legMat);
-    this.legR = mk(G.leg, legMat);
+    this.body = mk(bodyGeo, MAT.char);
+    this.legL = mk(legGeo, MAT.char);
+    this.legR = mk(legGeo, MAT.char);
     this.gun = withGun ? mk(G.guns[0], MAT.gun) : null;
-    this.meshes = [this.shadow, this.body, this.head, this.legL, this.legR];
+    this.meshes = [this.shadow, this.body, this.legL, this.legR];
     if (this.gun) this.meshes.push(this.gun);
   }
   begin() { this.n = 0; }
@@ -290,7 +488,6 @@ class Troop {
     if (this.n >= this.max || k <= 0.01) return;
     const o = this.n++ * 16, c = Math.cos(ry), s = Math.sin(ry);
     wRy(this.body.instanceMatrix.array, o, c, s, x, y, z, k);
-    wRy(this.head.instanceMatrix.array, o, c, s, x, y, z, k);
     if (this.gun) wRy(this.gun.instanceMatrix.array, o, c, s, x, y, z, k);
     wRy(this.shadow.instanceMatrix.array, o, 1, 0, x, 0, z, k);
     const cb = Math.cos(swing), sb = Math.sin(swing), hy = y + 0.45 * k, hx = 0.075 * k;
@@ -307,8 +504,8 @@ class Troop {
   }
 }
 
-const pTroop = new Troop(MAXV, MAT.pBody, MAT.pLeg, true);
-const eTroop = new Troop(360, MAT.eBody, MAT.eLeg, false);
+const pTroop = new Troop(MAXV, G.soldier, G.legP, true);
+const eTroop = new Troop(360, G.raider, G.legE, false);
 
 // ============================================================ particles & bullets
 const PN = 420;
@@ -620,6 +817,7 @@ function buildLevel(L) {
   }
   // ground
   const gGeo = keep(new THREE.PlaneGeometry(260, len + 120)); gGeo.rotateX(-Math.PI / 2);
+  { const guv = gGeo.attributes.uv; for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * 26, guv.getY(i) * (len + 120) / 8); }
   const ground = new THREE.Mesh(gGeo, MAT.ground); ground.position.set(0, -0.06, len / 2 - 30);
   grp.add(ground);
   // darker grass bands along the road
@@ -632,22 +830,28 @@ function buildLevel(L) {
 
   // decor
   const rnd = mulberry32(L * 31 + 7);
-  const decor = { tree1: [], tree2: [], rock: [], bush: [] };
+  const decor = { tree1: [], tree2: [], tree3: [], rock: [], bush: [], flowers1: [], flowers2: [], fence: [], cloud: [] };
   for (let z = -30; z < len - 20; z += 2.2) {
     for (const s of [-1, 1]) {
-      if (rnd() < 0.45) continue;
-      const d = HALF + 2.5 + Math.pow(rnd(), 1.6) * 24;
+      if (rnd() < 0.4) continue;
+      const d = HALF + 2.6 + Math.pow(rnd(), 1.6) * 24;
       const r = rnd();
-      const type = d < 8.5 ? (r < 0.6 ? 'bush' : 'rock') : r < 0.45 ? 'tree1' : r < 0.85 ? 'tree2' : r < 0.93 ? 'rock' : 'bush';
+      const type = d < 8.5 ? (r < 0.45 ? 'bush' : r < 0.6 ? 'rock' : r < 0.8 ? 'flowers1' : 'flowers2')
+        : r < 0.33 ? 'tree1' : r < 0.66 ? 'tree2' : r < 0.8 ? 'tree3' : r < 0.87 ? 'rock' : r < 0.94 ? 'bush' : 'flowers1';
       decor[type].push([s * d, z + rnd() * 2, 0.75 + rnd() * 0.7, rnd() * 6.28]);
     }
+  }
+  for (let z = -30; z < len - 20; z += 2) { decor.fence.push([-(HALF + 0.95), z, 1, 0]); decor.fence.push([HALF + 0.95, z, 1, 0]); }
+  for (let z = -20; z < len + 40; z += 14 + rnd() * 10) {
+    const s = rnd() < 0.5 ? -1 : 1;
+    decor.cloud.push([s * (22 + rnd() * 40), z + 20, 1 + rnd() * 1.2, rnd() * 0.6, 16 + rnd() * 14]);
   }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v3 = new THREE.Vector3(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   for (const type in decor) {
     const list = decor[type];
     if (!list.length) continue;
-    const im = new THREE.InstancedMesh(G[type], MAT.decor, list.length);
-    list.forEach((d, i) => { q.setFromAxisAngle(up, d[3]); sc.setScalar(d[2]); v3.set(d[0], 0, d[1]); m4.compose(v3, q, sc); im.setMatrixAt(i, m4); });
+    const im = new THREE.InstancedMesh(G[type], type === 'cloud' ? MAT.cloud : MAT.decor, list.length);
+    list.forEach((d, i) => { q.setFromAxisAngle(up, d[3]); sc.setScalar(d[2]); v3.set(d[0], d[4] || 0, d[1]); m4.compose(v3, q, sc); im.setMatrixAt(i, m4); });
     im.computeBoundingSphere();
     grp.add(im); keep(im);
   }
@@ -656,6 +860,7 @@ function buildLevel(L) {
   const panelGeo = keep(new THREE.PlaneGeometry(4.75, 2.3));
   const postGeo = keep(new THREE.CylinderGeometry(0.13, 0.13, 2.9, 10));
   const capGeo = keep(new THREE.SphereGeometry(0.22, 12, 8));
+  const baseGeo = keep(new THREE.CylinderGeometry(0.26, 0.3, 0.22, 12));
   for (const gs of spec.gates) {
     const g = new THREE.Group(); g.position.z = gs.z; grp.add(g);
     const panels = [];
@@ -669,6 +874,7 @@ function buildLevel(L) {
     for (const px of [-HALF, 0, HALF]) {
       const post = new THREE.Mesh(postGeo, MAT.post); post.position.set(px, 1.45, 0); g.add(post);
       const cap = new THREE.Mesh(capGeo, MAT.post); cap.position.set(px, 2.95, 0); g.add(cap);
+      const base = new THREE.Mesh(baseGeo, MAT.postBase); base.position.set(px, 0.11, 0); g.add(base);
     }
     LV.gates.push({ z: gs.z, ops: gs.ops, g, panels, passed: false, t: 0, side: -1 });
   }
@@ -681,10 +887,17 @@ function buildLevel(L) {
     let mat = MAT.wood;
     if (isWall) {
       const t = keep(TEX.brick.clone()); t.repeat.set(w / 1.5, 1); t.needsUpdate = true;
-      mat = keep(new THREE.MeshLambertMaterial({ map: t }));
+      mat = keep(addRim(new THREE.MeshLambertMaterial({ map: t }), 0.25));
     }
     const m = new THREE.Mesh(geo, mat);
     m.position.set(bs.x, h / 2, bs.z);
+    if (isWall) {
+      const capG = keep(new THREE.BoxGeometry(w + 0.16, 0.16, d + 0.16));
+      const cap = new THREE.Mesh(capG, MAT.stone); cap.position.y = h / 2 + 0.08; m.add(cap);
+    } else {
+      const bandG = keep(new THREE.BoxGeometry(w + 0.04, 0.12, d + 0.04));
+      for (const yy of [-0.5, 0.5]) { const band = new THREE.Mesh(bandG, MAT.postBase); band.position.y = yy; m.add(band); }
+    }
     grp.add(m);
     const b = { ...bs, d, h, hp: bs.hp, max: bs.hp, alive: true, mesh: m, wob: 0 };
     b.label = new BlockLabel(b);
@@ -703,6 +916,7 @@ function buildLevel(L) {
   const slotGeo = keep(new THREE.PlaneGeometry(HALF * 2 - 0.6, 0.42)); slotGeo.rotateX(-Math.PI / 2);
   for (const ss of spec.saws) {
     const slot = new THREE.Mesh(slotGeo, MAT.slot); slot.position.set(0, 0.008, ss.z); grp.add(slot);
+    for (const sx of [-1, 1]) { const pst = new THREE.Mesh(G.sawPost, MAT.decor); pst.position.set(sx * (HALF + 0.35), 0, ss.z); grp.add(pst); }
     const blade = new THREE.Mesh(G.saw, MAT.decor); blade.position.set(0, 0.5, ss.z); grp.add(blade);
     LV.saws.push({ ...ss, x: 0, blade });
   }
@@ -753,7 +967,7 @@ function buildBoss(z, hp, L) {
   const s = 1 + Math.min(L, 12) * 0.035;
   const group = new THREE.Group();
   const own = [];
-  const mat = (c, e = 0) => { const m = new THREE.MeshLambertMaterial({ color: c, emissive: e }); own.push(m); return m; };
+  const mat = (c, e = 0) => { const m = addRim(new THREE.MeshLambertMaterial({ color: c, emissive: e }), 0.38); own.push(m); return m; };
   const geo = (g) => { own.push(g); return g; };
   const red = mat(0xd8343f), dark = mat(0x3b2633), skin = mat(0x9be06a), metal = mat(0xbfc7d3), eye = mat(0xffffff), pupil = mat(0x16233b);
   const flashMats = [red, skin];
@@ -774,11 +988,22 @@ function buildBoss(z, hp, L) {
   const browR = add(body, new THREE.BoxGeometry(0.36, 0.09, 0.08), pupil, 0.28, 5.04, 0.74); browR.rotation.z = 0.4;
   add(body, new THREE.BoxGeometry(0.4, 0.07, 0.06), pupil, 0, 4.48, 0.78);
   helm.scale.set(1, 0.9, 1);
+  const bone = mat(0xf3ecdc);
+  for (const sx of [-1, 1]) {
+    const tusk = add(body, new THREE.ConeGeometry(0.07, 0.22, 8), bone, sx * 0.17, 4.56, 0.74); tusk.rotation.x = -0.25;
+    add(body, new THREE.SphereGeometry(0.16, 10, 8), skin, sx * 0.78, 4.78, 0);                     // ears
+    const pad = add(body, new THREE.SphereGeometry(0.66, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), dark, sx * 1.42, 4.02, 0);
+    pad.scale.set(1, 0.8, 1);
+    for (let k = -1; k <= 1; k++) { const sp = add(body, new THREE.ConeGeometry(0.11, 0.38, 8), metal, sx * 1.42 + k * 0.28, 4.6 - Math.abs(k) * 0.08, 0); sp.rotation.z = -sx * 0.25; }
+    const strap = add(body, new THREE.BoxGeometry(0.26, 2.5, 0.14), dark, 0, 3.15, 0.98); strap.rotation.z = sx * 0.55;
+  }
+  add(body, new THREE.SphereGeometry(0.13, 10, 8), mat(0x86c95b), 0, 4.66, 0.8);                    // nose
+  add(body, new THREE.CylinderGeometry(0.3, 0.3, 0.12, 12).rotateX(Math.PI / 2), metal, 0, 3.15, 1.08); // chest medallion
 
   const limb = (x, y, w, h, m, foot) => {
     const piv = new THREE.Group(); piv.position.set(x, y, 0); body.add(piv);
-    add(piv, new THREE.BoxGeometry(w, h, w), m, 0, -h / 2, 0);
-    if (foot) add(piv, new THREE.BoxGeometry(w * 1.1, 0.35, w * 1.5), dark, 0, -h + 0.1, 0.15);
+    add(piv, new THREE.CapsuleGeometry(w / 2, h - w, 4, 12), m, 0, -h / 2, 0);
+    if (foot) { const f = add(piv, new THREE.SphereGeometry(w * 0.62, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), dark, 0, -h - 0.02, 0.18); f.scale.set(1, 0.75, 1.45); }
     return piv;
   };
   const legL = limb(-0.6, 2.1, 0.8, 2.0, dark, true);
@@ -786,6 +1011,8 @@ function buildBoss(z, hp, L) {
   const armL = limb(-1.5, 4.0, 0.58, 1.8, red, false);
   const armR = limb(1.5, 4.0, 0.58, 1.8, red, false);
   add(armL, new THREE.SphereGeometry(0.42, 12, 8), skin, 0, -1.95, 0);
+  add(armL, new THREE.CylinderGeometry(0.36, 0.36, 0.3, 12), metal, 0, -1.55, 0);
+  add(armR, new THREE.CylinderGeometry(0.36, 0.36, 0.3, 12), metal, 0, -1.55, 0);
   add(armR, new THREE.SphereGeometry(0.42, 12, 8), skin, 0, -1.95, 0);
   // hammer
   add(armR, new THREE.CylinderGeometry(0.11, 0.11, 2.0, 8), mat(0x7a4f2a), 0, -2.7, 0);
@@ -938,7 +1165,6 @@ function killEnemyFront(g) {
 
 function setWeaponVisual(w) {
   pTroop.gun.geometry = G.guns[w];
-  MAT.gun.color.setHex(WEAPONS[w].gun);
   MAT.bullet.color.setHex(WEAPONS[w].bullet);
 }
 
@@ -1277,6 +1503,7 @@ function drawTroops() {
 }
 
 function updateCamera(dt) {
+  if (S.freeCam) return;
   const r = Math.min(formRadius(S.count), 4.5);
   let px, py, pz, lx, ly, lz;
   if (S.state === 'menu') {
@@ -1453,7 +1680,7 @@ window.addEventListener('pointercancel', endDrag);
 window.addEventListener('contextmenu', (e) => e.preventDefault());
 
 // debug / testing hook
-window.__G = { S, squad, get LV() { return LV; }, startRun, showMenu, save, step: update };
+window.__G = { S, squad, get LV() { return LV; }, startRun, showMenu, save, step: update, camera, setWeapon: (w) => { S.weapon = w; setWeaponVisual(w); } };
 
 showMenu();
 startLoop();
