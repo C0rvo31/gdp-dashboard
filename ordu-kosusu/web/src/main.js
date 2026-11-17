@@ -768,7 +768,11 @@ const BOSS_ATK = {
 };
 function bossAtk(b) { const A = BOSS_ATK[b.kind] || BOSS_ATK.orc; return { T: A.T, base: A.base + LV.L * 0.05, pct: A.pct }; }
 // fixed boss HP: world base x level growth, independent of the army and its weapon
-const bossHpFor = (L, kind) => Math.round(1300 * (BOSS_ATK[kind] || BOSS_ATK.orc).hp * (1 + 0.12 * (L - 6 * Math.floor((L - 1) / 10))) / 10) * 10;
+// fixed boss HP per level: grows with the level inside a world (armies grow) and with the world
+const bossHpFor = (L, kind) => {
+  const local = (L - 1) % 10, world = Math.floor((L - 1) / 10);
+  return Math.round(1300 * (BOSS_ATK[kind] || BOSS_ATK.orc).hp * (1 + 0.36 * local) * (1 + 0.45 * world) / 10) * 10;
+};
 function makeBoss(z, L, kind) {
   const b = buildBoss(kind);
   const s = 1 + Math.min(L, 30) * 0.02;
