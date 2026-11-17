@@ -27,6 +27,9 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
 #progress{width:min(60vw,260px);height:9px;border-radius:9px;background:rgba(16,30,60,.35);overflow:hidden}
 #progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,#7cf29a,#2fd36a);border-radius:9px}
 #bossBar{position:fixed;left:50%;transform:translateX(-50%);top:calc(var(--safe-top) + 64px);width:min(78vw,340px);text-align:center;color:#fff;font-weight:900;text-shadow:0 2px 0 rgba(0,0,0,.35);font-size:14px;letter-spacing:1px}
+#bossBar .bh{font-variant-numeric:tabular-nums;margin-left:6px;color:#ffe08a}
+#wBadge{position:fixed;left:14px;top:calc(var(--safe-top) + 74px);font-size:13px;padding:5px 11px;pointer-events:none}
+#wBadge b{color:#ffc83a}
 #bossBar .bar{margin-top:5px;height:14px;border-radius:10px;background:rgba(40,0,0,.5);border:2px solid #fff;overflow:hidden}
 #bossBar .bar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#ff7a59,#ff2d44);transition:width .12s}
 
@@ -56,6 +59,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
 #wpn .wi{width:54px;height:54px;border-radius:14px;display:grid;place-items:center;background:#eaf2ff}
 #wpn .wi svg{width:40px;height:40px}
 #wpn small{display:block;font-size:11px;font-weight:900;letter-spacing:1.5px;color:#1b9a4a}
+#wpn em{display:block;font-style:normal;font-size:15px;font-weight:900;color:#e0561f;letter-spacing:1px}
 #wpn b{display:block;font-size:24px;font-weight:900;letter-spacing:1px;line-height:1.1}
 #wpn.go{animation:wpn 1.2s cubic-bezier(.2,1.4,.4,1) forwards}
 @keyframes wpn{0%{opacity:0;transform:translateX(-50%) translateY(20px) scale(.6)}18%{opacity:1;transform:translateX(-50%) scale(1.08)}30%{transform:translateX(-50%) scale(1)}80%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-16px)}}
@@ -166,12 +170,13 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
     <div class="pill"><span class="coin"></span><span id="coins">0</span></div>
   </div>
 
-  <div id="bossBar" class="hidden">DEV<div class="bar"><i></i></div></div>
+  <div id="bossBar" class="hidden"><span class="bn">DEV</span> <span class="bh"></span><div class="bar"><i></i></div></div>
+  <div class="pill hidden" id="wBadge"></div>
   <div id="fx"></div>
   <div id="pulse"></div>
   <div id="toast"></div>
   <div id="splash"><small>YENİ BÖLÜM</small><b></b></div>
-  <div id="wpn"><div class="wi"></div><div><small>YENİ SİLAH</small><b></b></div></div>
+  <div id="wpn"><div class="wi"></div><div><small>YENİ SİLAH</small><b></b><em></em></div></div>
 
   <div id="menu">
     <div id="title">

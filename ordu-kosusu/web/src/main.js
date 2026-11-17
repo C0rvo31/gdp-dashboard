@@ -23,19 +23,33 @@ save.level = Math.max(1, Math.floor(save.level));
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* ignore */ } }
 
 const UPG = { upStart: { base: 40, max: 40 }, upRate: { base: 55, max: 30 }, upDmg: { base: 55, max: 30 } };
-const upCost = (k) => Math.round(UPG[k].base * Math.pow(1.42, save[k]));
+const upCost = (k) => Math.round(UPG[k].base * Math.pow(1.28, save[k]));
 const startSoldiers = () => 1 + save.upStart;
 const rateMul = () => 1 + save.upRate * 0.08;
 const dmgMul = () => 1 + save.upDmg * 0.1;
 
+// dmg = damage multiplier per bullet (shown to the player as HASAR ×N)
 const WEAPONS = [
   { name: 'TABANCA', rate: 2.0, dmg: 1.0, len: 0.26, bullet: 0xffe14d, bs: 1.0, icon: '#3b3f4a' },
-  { name: 'TÜFEK', rate: 3.0, dmg: 1.25, len: 0.46, bullet: 0xffb020, bs: 1.1, icon: '#7a4f2a' },
-  { name: 'MAKİNELİ', rate: 4.6, dmg: 1.4, len: 0.56, bullet: 0xff8a1a, bs: 1.1, icon: '#23262e' },
-  { name: 'PLAZMA', rate: 5.4, dmg: 1.95, len: 0.6, bullet: 0x6ff7ff, bs: 1.4, icon: '#1d9bf0' },
-  { name: 'ROKETATAR', rate: 3.2, dmg: 4.6, len: 0.74, bullet: 0xff5a3a, bs: 2.0, icon: '#41663a' },
+  { name: 'TÜFEK', rate: 2.4, dmg: 1.5, len: 0.46, bullet: 0xffb020, bs: 1.1, icon: '#7a4f2a' },
+  { name: 'MAKİNELİ', rate: 2.8, dmg: 2.2, len: 0.56, bullet: 0xff8a1a, bs: 1.1, icon: '#23262e' },
+  { name: 'PLAZMA', rate: 3.2, dmg: 3.2, len: 0.6, bullet: 0x6ff7ff, bs: 1.4, icon: '#1d9bf0' },
+  { name: 'ROKETATAR', rate: 3.4, dmg: 4.5, len: 0.74, bullet: 0xff5a3a, bs: 2.0, icon: '#41663a' },
 ];
+const dmgText = (w) => 'HASAR ×' + String(w.dmg).replace('.', ',');
 const curDps = () => { const w = WEAPONS[S.weapon]; return S.count * w.rate * w.dmg * rateMul() * dmgMul(); };
+// Reference strength used to size enemy / wall / boss HP. It depends on the LEVEL and on how far along the road the
+// object is (a player is expected to have picked up ~1 weapon tier per 1/3 of the road), NOT on the weapon / upgrades the
+// player really has, so better weapons and upgrades make fights shorter.
+const REF_K = 1.0;
+const wDps = (t) => { t = clamp(t, 0, WEAPONS.length - 1); const i = Math.min(WEAPONS.length - 2, Math.floor(t)), f = t - i, a = WEAPONS[i], b = WEAPONS[i + 1]; return lerp(a.rate * a.dmg, b.rate * b.dmg, f); };
+const startTier = (L) => (L > 10 ? 1 : 0);   // veterans start with a rifle so tier 4 (ROKETATAR) can be reached with 3 crates
+function refPS(z) { // tier a player has if he broke every weapon crate before z
+  let t = startTier(LV.L);
+  for (const b of LV.spec.blocks) if (b.kind === 'weapon' && b.z < z - 4) t++;
+  return REF_K * wDps(Math.min(t, WEAPONS.length - 1));
+}
+const refDpsAt = (z) => refPS(z) * S.count;
 
 
 // ============================================================ constants & formation
@@ -46,7 +60,8 @@ const MAXV = 150;          // visible player soldiers (label shows the real numb
 const GROUP_MAXV = 96;     // visible soldiers per enemy group
 const BULLET_SPEED = 46;
 const EB_SPEED = 17;
-const ARM_DIST = 85;       // objects get their numbers when they come this close
+const ARM_DIST = 85;
+const ENEMY_ARM = 38;      // enemy groups get their size when they come this close       // objects get their numbers when they come this close
 
 function dims(n) {
   n = Math.max(1, Math.min(n, MAXV));
@@ -396,8 +411,9 @@ class BlockLabel {
       x.fillStyle = 'rgba(255,255,255,.92)'; roundRect(x, 14, 14, 228, 228, 30); x.fill();
       if (b.kind === 'weapon') {
         const w = WEAPONS[b.tier || 1];
-        drawGunIcon(x, 128, 86, 1.45, w.icon);
-        x.font = `900 26px ${FONT}`; x.fillStyle = '#16233b'; x.textAlign = 'center'; x.fillText(w.name, 128, 152);
+        drawGunIcon(x, 128, 74, 1.3, w.icon);
+        x.font = `900 26px ${FONT}`; x.fillStyle = '#16233b'; x.textAlign = 'center'; x.fillText(w.name, 128, 128);
+        x.font = `900 22px ${FONT}`; x.fillStyle = '#e0561f'; x.fillText(dmgText(w), 128, 156);
       } else {
         drawSoldierIcon(x, 78, 92, 1.25);
         strokeText(x, '+' + (b.v || 0), 162, 88, 64, '#2f8cff', '#ffffff', 2);
@@ -672,8 +688,8 @@ function buildLevel(L) {
   squad.sold.length = 0;
   S.count = startSoldiers();
   S.deaths = {};
-  S.weapon = 0; S.runCoins = 0; S.collected = 0; S.fight = null; S.shotAcc = 0; S.shake = 0;
-  setWeaponVisual(0);
+  S.weapon = startTier(L); S.runCoins = 0; S.collected = 0; S.fight = null; S.shotAcc = 0; S.shake = 0;
+  setWeaponVisual(S.weapon);
   syncSquad(true);
   clearBullets();
   armObjects();
@@ -700,27 +716,28 @@ function armObjects() {
     g.armed = true;
     let a = makeOp(g.defs[0], S.count), b = makeOp(g.defs[1], S.count);
     if (a.k === b.k && a.v === b.v) b = b.k === 'mul' ? { k: 'add', v: nice(S.count + 5) } : { k: b.k, v: b.v + (b.k === 'div' ? 1 : 5) };
+    // a bad gate that does nothing (÷2 on 1) or kills outright becomes a small bonus instead
+    for (const o of [a, b]) if (!isGood(o) && (applyOp(o, S.count) >= S.count || applyOp(o, S.count) <= 0)) { o.k = 'add'; o.v = 1; }
     g.ops = [a, b];
     g.panels.forEach((p, i) => { p.material.map = gateTexture(g.ops[i]); p.material.needsUpdate = true; p.visible = true; });
   }
-  const w = WEAPONS[S.weapon], dps = curDps(), d = dims(S.count);
+  const d = dims(S.count);
   for (const b of LV.blocks) {
     if (b.armed || b.z > lim) continue;
     b.armed = true;
     if (b.kind === 'weapon' && S.weapon >= WEAPONS.length - 1) b.kind = 'soldier';
-    if (b.kind === 'weapon') b.tier = S.weapon + 1;
+    if (b.kind === 'weapon') b.tier = S.weapon + 1;   // label only; the real tier is decided when it breaks
     if (b.kind === 'soldier') b.v = nice(Math.round(S.count * b.vf) + 5);
     const frac = Math.min(1, (b.w + 0.5) / (2 * d.hw));
-    b.hp = b.max = Math.max(4, niceHp(dps * frac * b.tf));
+    b.hp = b.max = Math.max(4, niceHp(refDpsAt(b.z) * frac * b.tf));
     b.label.draw(true); b.labelMesh.visible = true;
-    void w;
   }
   for (const g of LV.enemies) {
-    if (g.armed || g.z > lim) continue;
+    if (g.armed || g.z > squad.z + ENEMY_ARM) continue;
     g.armed = true;
-    g.count = Math.max(3, Math.min(600, Math.round(S.count * g.f * (g.T.shoots ? 0.7 : 1))));
+    g.count = Math.max(3, Math.min(600, Math.round(S.count * Math.min(g.f, 1.25) * (g.T.shoots ? 0.7 : 1))));
     // one enemy takes about 1.5 s (x type toughness) of a single soldier's fire
-    g.hp = Math.max(0.05, Math.sqrt(g.T.hp) * LV.hpMul * (curDps() / Math.max(1, S.count)) * 1.1); // hp 0 -> pool NaN
+    g.hp = Math.max(0.05, Math.sqrt(g.T.hp) * LV.hpMul * refPS(g.z) * 1.1); // hp 0 -> pool NaN
     const dE = dims(g.count);
     g.x = g.xr * Math.max(0, HALF - 0.4 - dE.hw);
     syncGroup(g, true);
@@ -742,13 +759,28 @@ function rearmObjects() {
 }
 
 // ============================================================ boss
+// every boss hits differently: T = seconds between slams, soldiers lost per slam = base + pct * army
+const BOSS_ATK = {
+  orc: { T: 1.6, base: 1.5, pct: 0.045, hp: 1.0 },
+  sand: { T: 1.1, base: 1, pct: 0.035, hp: 1.05 },
+  yeti: { T: 2.2, base: 2.5, pct: 0.08, hp: 1.1 },
+  demon: { T: 1.8, base: 2.5, pct: 0.07, hp: 1.15 },
+  gorilla: { T: 2.0, base: 4, pct: 0.10, hp: 1.25 },
+};
+function bossAtk(b) { const A = BOSS_ATK[b.kind] || BOSS_ATK.orc; return { T: A.T, base: A.base + LV.L * 0.05, pct: A.pct }; }
+// fixed boss HP: world base x level growth, independent of the army and its weapon
+// fixed boss HP per level: grows with the level inside a world (armies grow) and with the world
+const bossHpFor = (L, kind) => {
+  const local = (L - 1) % 10, world = Math.floor((L - 1) / 10);
+  return Math.round(1300 * (BOSS_ATK[kind] || BOSS_ATK.orc).hp * (1 + 0.36 * local) * (1 + 0.45 * world) / 10) * 10;
+};
 function makeBoss(z, L, kind) {
   const b = buildBoss(kind);
   const s = 1 + Math.min(L, 30) * 0.02;
   b.group.scale.setScalar(s);
   b.group.rotation.y = Math.PI;
   b.group.position.set(0, 0, z);
-  return Object.assign(b, { s, x: 0, z, hp: 1, max: 1, state: 'idle', t: 0, atk: 0, flash: 0, hitDone: false, boomed: false });
+  return Object.assign(b, { kind, s, x: 0, z, hp: 1, max: 1, state: 'idle', t: 0, atk: 0, flash: 0, hitDone: false, boomed: false });
 }
 function setBossFlash(b, v) { for (const m of b.flashMats) m.emissive.setRGB(v, v, v); }
 
@@ -781,7 +813,7 @@ function updateBoss(dt) {
   } else if (b.state === 'attack') {
     if (b.z - squad.z > reach + 1.5) b.state = 'walk';
     b.atk += dt;
-    const T = 1.55, p = (b.atk % T) / T;
+    const A = bossAtk(b), T = A.T, p = (b.atk % T) / T;
     if (b.atk >= T) { b.atk -= T; b.hitDone = false; }
     let th;
     if (p < 0.45) th = lerp(0.2, 2.7, ease(p / 0.45));
@@ -797,7 +829,7 @@ function updateBoss(dt) {
       sfx.play('slam'); vibrate(60);
       burst(b.x, 0.2, b.z - 3.1 * b.s, 0xd9cdb8, 22, 8, 1.6, 20, 2);
       S.cause = 'boss';
-      const k = Math.max(2, Math.ceil(S.count * 0.11));
+      const k = Math.max(1, Math.round(A.base * Math.min(1, S.count / 50) + A.pct * S.count));
       for (let n = 0; n < k && S.count > 0; n++) killFront();
     }
   }
@@ -821,6 +853,7 @@ function hitBoss(dmg, bx) {
 }
 function updateBossBar() {
   const b = LV.boss;
+  $('bossBar').querySelector('.bh').textContent = String(Math.max(0, Math.ceil(b.hp))).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   $('bossBar').querySelector('i').style.width = (100 * Math.max(0, b.hp) / b.max).toFixed(1) + '%';
 }
 
@@ -886,6 +919,8 @@ function setWeaponVisual(w) {
   const pg = PLAYER_GEO[w];
   pTroop.setGeo(pg.body, pg.leg, pg.gun, pg.lod);
   MAT.bullet.color.setHex(WEAPONS[w].bullet);
+  const bd = $('wBadge');
+  if (bd) bd.innerHTML = WEAPONS[w].name + ' <b>×' + String(WEAPONS[w].dmg).replace('.', ',') + '</b>';
 }
 
 // ============================================================ gameplay update
@@ -913,14 +948,21 @@ function blockDestroyed(b, reward) {
   // stray bullets after a loss must not hand out soldiers/weapons (would revive the army)
   if (!reward || (S.state !== 'play' && S.state !== 'boss')) return;
   if (b.kind === 'weapon') {
-    if (b.tier > S.weapon) {
-      S.weapon = b.tier; setWeaponVisual(S.weapon);
+    const tier = Math.min(S.weapon + 1, WEAPONS.length - 1);
+    if (tier > S.weapon) {
+      S.weapon = tier; setWeaponVisual(S.weapon);
       // new uniforms: everyone pops into the new look
       for (const s of squad.sold) s.k = 0.35;
-    }
-    weaponPopup(b.tier);
-    sfx.play('upgrade');
-    burst(squad.x, 1.2, squad.z, WEAPONS[b.tier].bullet, 24, 5, 0.6, 5, 5);
+      weaponPopup(tier);
+      sfx.play('upgrade');
+      burst(squad.x, 1.2, squad.z, WEAPONS[tier].bullet, 24, 5, 0.6, 5, 5);
+      // other armed weapon crates show the tier they will now give (or turn into soldier crates at the top)
+      for (const o of LV.blocks) {
+        if (!o.alive || !o.armed || o.kind !== 'weapon') continue;
+        if (S.weapon >= WEAPONS.length - 1) { o.kind = 'soldier'; o.v = nice(Math.round(S.count * o.vf) + 5); } else o.tier = S.weapon + 1;
+        o.label.draw(true);
+      }
+    } else { toast('+' + 5 + ' ASKER'); changeCount(S.count + 5, true); }
   } else if (b.kind === 'soldier') {
     toast('+' + b.v + ' ASKER');
     changeCount(S.count + b.v, true);
@@ -968,7 +1010,7 @@ function updateGroups(dt) {
       g.z = lerp(g.z, squad.z + 0.6, Math.min(1, dt * 4));
       g.x = lerp(g.x, squad.x, Math.min(1, dt * 3));
       g.fightAcc += dt * (12 + Math.min(S.count, g.count) * 1.7);
-      const melee = Math.pow(T.hp, 0.35);
+      const melee = Math.pow(T.hp, 0.15);   // ~1:1 trade for equal armies, tough types slightly better
       while (g.fightAcc >= 1 && g.alive && S.count > 0) {
         g.fightAcc -= 1;
         g.meleeAcc += 1;
@@ -997,11 +1039,11 @@ function updateEnemyFire(dt) {
       if (!g.alive || !g.armed || !g.T.shoots || g.state === 'fight' || g.state === 'idle') continue;
       const dz = g.z - squad.z;
       if (dz < 1 || dz > 26 || !g.sold.length || !squad.sold.length) continue;
-      g.shotAcc += Math.min(g.count * g.T.rate, 14) * dt;
+      g.shotAcc += Math.min(g.count * g.T.rate, 8) * dt;
       while (g.shotAcc >= 1) {
         g.shotAcc -= 1;
         const e = g.sold[(Math.random() * Math.min(g.sold.length, 18)) | 0];
-        const tgt = squad.sold[(Math.random() * Math.min(squad.sold.length, 12)) | 0];
+        const tgt = squad.sold[(Math.random() * squad.sold.length) | 0];
         const sx = e.x + 0.07, sz = e.z - 0.55;
         const tx = tgt.x + (Math.random() - 0.5) * 0.9, tz = tgt.z + 0.2;
         const dx = tx - sx, dzz = tz - sz, l = Math.hypot(dx, dzz) || 1;
@@ -1086,6 +1128,10 @@ function updateObstacles(dt) {
       const s = squad.sold[i];
       if (!s) continue;
       if (Math.abs(s.z - sw.z) < 0.35 && Math.abs(s.x - sw.x) < 0.7) {
+        // a saw can only chew through a handful of soldiers per second, however long the column is
+        if (S.t - (sw.winT || -9) > 1) { sw.winT = S.t; sw.winN = 0; }
+        if (sw.winN >= 6) continue;
+        sw.winN++;
         S.cause = 'saw'; killSoldier(i); sfx.play('saw');
         if (S.state !== 'play') return;
       }
@@ -1216,7 +1262,7 @@ function armTraps(lim) {
   for (const r of LV.rollers) {
     if (r.armed || r.z > lim) continue;
     r.armed = true;
-    r.hp = r.max = Math.max(4, niceHp(curDps() * frac * r.tf));
+    r.hp = r.max = Math.max(4, niceHp(refDpsAt(r.z) * frac * r.tf));
     r.label.draw(true); r.sprite.visible = true;
   }
 }
@@ -1356,29 +1402,10 @@ function nearTargets() {
 }
 
 // each soldier fires in turn (round robin) and aims at the nearest enemy in a forward cone
-const bossAim = { x: 0, z: 0 };
-function fireFrom(s, dmg, targets) {
+function fireFrom(s, dmg) {
+  // no aiming: every soldier fires straight ahead (+z); hits are lane based (bullet x vs target x)
   const w = WEAPONS[S.weapon];
-  const gx = s.x - 0.07, gz = s.z + 0.35 + w.len;
-  let vx = 0, vz = 1, best = null, bd = 1e9;
-  for (const T of targets) {
-    if (T === LV.boss) {
-      const dz = T.z - gz;
-      if (dz > 1 && dz < 34) { const tx = clamp(T.x + (Math.random() - 0.5) * 1.6 * T.s, gx - dz * 0.35, gx + dz * 0.35); bossAim.x = tx; bossAim.z = T.z - 0.8; best = bossAim; bd = -1; }
-    } else if (T.sold && bd >= 0) {
-      if (T.z - gz > 31 || T.z + 12 < gz) continue;
-      for (const e of T.sold) {
-        const dz = e.z - gz;
-        if (dz < 0.8 || dz > 30) continue;
-        const dx = e.x - gx;
-        if (Math.abs(dx) > dz * 0.35) continue;
-        const sc = Math.abs(dx) * 3 + dz;
-        if (sc < bd) { bd = sc; best = e; }
-      }
-    }
-  }
-  if (best) { const dx = best.x - gx, dz = best.z - gz, l = Math.hypot(dx, dz); vx = dx / l; vz = dz / l; }
-  spawnIn(B, gx, 0.75, gz, vx * BULLET_SPEED, vz * BULLET_SPEED, dmg, 0.62);
+  spawnIn(B, s.x - 0.07, 0.75, s.z + 0.35 + w.len, 0, BULLET_SPEED, dmg, 0.62);
 }
 
 function updateShooting(dt) {
@@ -1392,7 +1419,7 @@ function updateShooting(dt) {
     while (S.shotAcc >= 1) {
       S.shotAcc -= 1;
       S.rr = (S.rr + 1) % squad.sold.length;
-      fireFrom(squad.sold[S.rr], dmg, targets);
+      fireFrom(squad.sold[S.rr], dmg);
     }
     if (targets.length) sfx.play('shot');
   }
@@ -1445,9 +1472,9 @@ function updateShooting(dt) {
 function enterBoss() {
   S.state = 'boss';
   const b = LV.boss;
-  b.hp = b.max = Math.max(30, Math.round(curDps() * (9 + Math.min(LV.L, 30) * 0.12)));
+  b.hp = b.max = bossHpFor(LV.L, b.kind);
   b.state = 'walk';
-  $('bossBar').firstChild.nodeValue = b.name;
+  $('bossBar').querySelector('.bn').textContent = b.name;
   $('bossBar').classList.remove('hidden');
   updateBossBar();
   toast(b.name + '!', true);
@@ -1665,6 +1692,7 @@ function floatText(text, cls) {
 function weaponPopup(tier) {
   const w = WEAPONS[tier], el = $('wpn');
   el.querySelector('b').textContent = w.name;
+  el.querySelector('em').textContent = dmgText(w);
   el.querySelector('.wi').innerHTML = '<svg viewBox="0 0 24 24"><path d="M2 9h13l2-2h4v4h-3v2h-5l-1 2h-3l-1 5H5l1-5H2z" fill="' + w.icon + '"/><circle cx="20.5" cy="9" r="1.6" fill="#' + w.bullet.toString(16).padStart(6, '0') + '"/></svg>';
   el.classList.remove('go'); void el.offsetWidth; el.classList.add('go');
 }
@@ -1744,6 +1772,7 @@ function refreshMenu() {
 }
 
 function showMenu() {
+  { const bd = $('wBadge'); if (bd) bd.classList.add('hidden'); }
   S.state = 'menu'; S.paused = false; S.endShown = false; S.confetti = false;
   ['winPanel', 'losePanel', 'settings', 'bossBar'].forEach((id) => $(id).classList.add('hidden'));
   $('menu').classList.remove('hidden');
@@ -1753,6 +1782,7 @@ function showMenu() {
 }
 
 function startRun() {
+  { const bd = $('wBadge'); if (bd) bd.classList.remove('hidden'); }
   if (S.state !== 'menu') return;
   sfx.unlock();
   S.state = 'play'; S.t = 0; S.endShown = false; S.confetti = false;
