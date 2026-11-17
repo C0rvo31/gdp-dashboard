@@ -62,6 +62,20 @@ export const THEMES = [
     skyline: { far: 0x3a1a22, near: 0x22161a, cap: 0xff6a1a, farShape: 'volcano', nearShape: 'alps' },
     fence: 'spikeFence', weather: 'embers', melee: 'skeleton', shooter: 'demon', boss: 'demon',
   },
+  {
+    key: 'jungle', name: 'ORMAN', skyTop: 0x4aa6d0, skyBot: 0xd6efd0, fog: 0xbcdcc2, fogNear: 40, fogFar: 112,
+    hemi: [0xf0fff0, 0x4a7a40, 2.3], sun: [0xfff0c8, 2.2], cloud: [0xffffff, 0x9ab8a8],
+    ground: ['#4fa83a', '#47a034', 'rgba(200,255,150,.10)', 'rgba(0,50,0,.12)'], band: 0x3f8a32,
+    road: ['#a68e6a', '#e8dcc0', 'rgba(240,230,200,.6)'], curb: ['#6f7f5c', '#c8bc92'],
+    wall: ['#4a5a3e', ['#8a9a78', '#7f8f6c', '#96a684']], cap: 0x7ab04a,
+    near: [['fern', 0.3], ['mossRock', 0.18], ['jungleFlowers', 0.2], ['bush', 0.14], ['mushroom', 0.08], ['fernSmall', 0.1]],
+    far: [['bigLeafTree', 0.26], ['junglePalm', 0.2], ['bamboo', 0.14], ['fern', 0.1], ['mossRock', 0.1], ['ruinPillar', 0.08], ['jungleFlowers', 0.06], ['bush', 0.06]],
+    big: [['stepPyramid', 0.22], ['templeRuin', 0.24], ['waterfall', 0.22], ['giantTree', 0.32]],
+    tiny: [['grassTuft', 0.4], ['fernSmall', 0.3], ['flowersTiny', 0.3]],
+    river: { sides: [1], base: 15, amp: 3, w: 3.6, bank: 0x7a6a48, water: 0x2f9e98, core: 0x6fd0c4, glow: false },
+    skyline: { far: 0x3f7a62, near: 0x2c6a3c, cap: null, farShape: 'hills', nearShape: 'hills' },
+    fence: 'bambooFence', weather: 'fireflies', melee: 'tribal', shooter: 'blowgun', boss: 'gorilla',
+  },
 ];
 export const themeIndex = (L) => Math.floor((L - 1) / 10) % THEMES.length;
 export const themeFor = (L) => THEMES[themeIndex(L)];
@@ -79,6 +93,10 @@ export function themeTextures(th, maxAniso) {
   x.fillStyle = th.road[1]; x.fillRect(8, 0, 9, 256); x.fillRect(239, 0, 9, 256);
   x.fillStyle = th.road[2]; x.fillRect(84, 20, 6, 96); x.fillRect(166, 20, 6, 96); x.fillRect(84, 148, 6, 96); x.fillRect(166, 148, 6, 96);
   if (th.key === 'lava') { x.strokeStyle = 'rgba(255,110,30,.35)'; x.lineWidth = 2; for (let i = 0; i < 6; i++) { x.beginPath(); let px = 30 + Math.random() * 200, py = Math.random() * 256; x.moveTo(px, py); for (let k = 0; k < 4; k++) { px += (Math.random() - 0.5) * 30; py += Math.random() * 25; x.lineTo(px, py); } x.stroke(); } }
+  if (th.key === 'jungle') {
+    for (let i = 0; i < 70; i++) { x.fillStyle = Math.random() < 0.5 ? 'rgba(90,70,45,.22)' : 'rgba(255,240,210,.12)'; x.beginPath(); x.ellipse(20 + Math.random() * 216, Math.random() * 256, 6 + Math.random() * 8, 4 + Math.random() * 5, Math.random() * 3, 0, Math.PI * 2); x.fill(); }
+    x.fillStyle = 'rgba(70,140,50,.35)'; for (let i = 0; i < 40; i++) x.fillRect(Math.random() < 0.5 ? 17 + Math.random() * 10 : 229 - Math.random() * 10, Math.random() * 256, 3, 3);
+  }
   T.road = canvasTex(c, 8); T.road.wrapS = T.road.wrapT = THREE.RepeatWrapping;
 
   c = makeCanvas(64, 64); x = c.getContext('2d');
@@ -99,6 +117,7 @@ export function themeTextures(th, maxAniso) {
     roundRect(x, ox, r * 32 + 3, 58, 26, 4); x.fill();
   }
   if (th.key === 'lava') { x.strokeStyle = '#ff7a1a'; x.lineWidth = 2; for (let i = 0; i < 4; i++) { x.beginPath(); x.moveTo(Math.random() * 128, 0); x.lineTo(Math.random() * 128, 64); x.lineTo(Math.random() * 128, 128); x.stroke(); } }
+  if (th.key === 'jungle') { x.fillStyle = 'rgba(80,160,50,.6)'; for (let i = 0; i < 10; i++) { const px = Math.random() * 124; x.fillRect(px, 0, 5, 6 + Math.random() * 22); x.fillRect(px - 3, 0, 11, 4); } }
   if (th.key === 'snow') { x.fillStyle = 'rgba(255,255,255,.5)'; for (let i = 0; i < 8; i++) x.fillRect(Math.random() * 120, Math.random() * 120, 10, 2); }
   T.wall = canvasTex(c); T.wall.wrapS = T.wall.wrapT = THREE.RepeatWrapping;
 
@@ -110,6 +129,10 @@ export function themeTextures(th, maxAniso) {
     x.fillStyle = 'rgba(40,110,30,.35)'; x.fillRect(0, 0, 6, 128);
     for (let i = 0; i < 420; i++) { x.fillStyle = ['rgba(30,100,20,.28)', 'rgba(190,255,140,.25)', 'rgba(60,140,40,.3)'][i % 3]; x.fillRect(Math.random() * 64, Math.random() * 128, 1.5, 4 + Math.random() * 4); }
     for (let i = 0; i < 14; i++) { x.fillStyle = ['#ffffff', '#ffe46a', '#ff8ac0'][i % 3]; x.fillRect(8 + Math.random() * 54, Math.random() * 126, 2, 2); }
+  } else if (th.key === 'jungle') {
+    x.fillStyle = 'rgba(30,70,20,.35)'; x.fillRect(0, 0, 6, 128);
+    for (let i = 0; i < 160; i++) { x.fillStyle = ['rgba(120,90,40,.35)', 'rgba(20,80,20,.35)', 'rgba(150,220,90,.25)'][i % 3]; x.beginPath(); x.ellipse(Math.random() * 64, Math.random() * 128, 2 + Math.random() * 2.5, 1, Math.random() * 3, 0, Math.PI * 2); x.fill(); }
+    for (let i = 0; i < 8; i++) { x.fillStyle = ['#ff5a3a', '#ffd23a', '#ff7eb6'][i % 3]; x.fillRect(8 + Math.random() * 54, Math.random() * 126, 2, 2); }
   } else if (th.key === 'desert') {
     x.strokeStyle = 'rgba(160,110,40,.22)'; x.lineWidth = 2;
     for (let k = 0; k < 12; k++) { x.beginPath(); for (let u = 0; u <= 64; u += 4) x.lineTo(u, k * 11 + Math.sin(u * 0.15 + k) * 3); x.stroke(); }
@@ -485,6 +508,88 @@ export function buildDecor() {
   D.ember = glow(M([
     F(new THREE.DodecahedronGeometry(0.09, 0).scale(1.3, 0.5, 1).translate(0, 0.03, 0), 0xff7a1a),
     F(new THREE.DodecahedronGeometry(0.06, 0).scale(1.2, 0.5, 1).translate(0.18, 0.02, 0.1), 0xffc23a)]));
+
+  // jungle
+  const leaf = (len, wid, droop, a, y, r0, col) => F(new THREE.SphereGeometry(0.5, 6, 4).scale(len, 0.1, wid).translate(len / 2, 0, 0).rotateZ(-droop).translate(r0, 0, 0).rotateY(a).translate(0, y, 0), col);
+  const vine = (x, y, z, l) => F(new THREE.CylinderGeometry(0.025, 0.02, l, 4).translate(x, y - l / 2, z), 0x3f7a2a);
+  const fernParts = (s, cols) => { const p = []; for (let i = 0; i < 8; i++) p.push(F(new THREE.ConeGeometry(0.16 * s, 1.1 * s, 4).scale(1, 1, 0.22).translate(0, 0.55 * s, 0).rotateZ(-0.95 - (i % 2) * 0.25).rotateY(i * 0.8), cols[i % cols.length])); return p; };
+  D.fern = M(fernParts(1, [0x3f9a3a, 0x52b048, 0x2f8a34]));
+  D.fernSmall = M(fernParts(0.45, [0x4caa40, 0x62c050]));
+  D.mossRock = M([
+    F(new THREE.DodecahedronGeometry(0.6, 0).scale(1.3, 0.75, 1).translate(0, 0.3, 0), 0x8a9488),
+    F(new THREE.DodecahedronGeometry(0.52, 0).scale(1.3, 0.35, 1).translate(0.05, 0.62, 0), 0x4f9a3a),
+    F(new THREE.DodecahedronGeometry(0.3, 0).translate(0.7, 0.15, 0.3), 0x7a8478)]);
+  D.jungleFlowers = M([
+    ...flower(0xff4a3a).map((g) => g.scale(1.6, 1.8, 1.6)), ...flower(0xffa020).map((g) => g.scale(1.4, 1.5, 1.4).translate(0.35, 0, 0.2)),
+    ...flower(0xff3a8a).map((g) => g.scale(1.5, 1.4, 1.5).translate(-0.3, 0, 0.25)),
+    leaf(0.7, 0.3, 0.5, 0.4, 0.12, 0, 0x3f9a3a), leaf(0.6, 0.28, 0.5, 2.6, 0.1, 0, 0x52b048), leaf(0.65, 0.3, 0.5, 4.5, 0.12, 0, 0x2f8a34)]);
+  {
+    const p = [F(new THREE.CylinderGeometry(0.15, 0.26, 2.7, 7).translate(0, 1.35, 0), 0x6a4a2e),
+      F(new THREE.IcosahedronGeometry(1.0, 0).scale(1.35, 0.55, 1.35).translate(0, 2.9, 0), 0x2f8a3a),
+      F(new THREE.IcosahedronGeometry(0.75, 0).scale(1.2, 0.55, 1.2).translate(0.45, 3.3, 0.2), 0x3fa848)];
+    for (let i = 0; i < 7; i++) p.push(leaf(1.5, 0.55, 0.45, i * 0.9, 2.75, 0.6, i % 2 ? 0x4cb84a : 0x2f9a3e));
+    p.push(vine(0.85, 2.6, 0.3, 1.5), vine(-0.7, 2.6, -0.4, 1.9), vine(0.2, 2.6, -0.9, 1.2));
+    D.bigLeafTree = M(p);
+  }
+  D.junglePalm = M([D.palm.clone().scale(1.15, 1.25, 1.15), vine(0.55, 3.5, 0.2, 1.6), vine(0.2, 3.5, -0.5, 2.0), vine(-0.35, 3.4, 0.35, 1.3),
+    F(new THREE.IcosahedronGeometry(0.11, 0).translate(0.35, 3.45, 0.25), 0x8a6a2a)]);
+  {
+    const p = [];
+    for (let i = 0; i < 5; i++) {
+      const x = Math.cos(i * 2.4) * 0.35, z = Math.sin(i * 2.4) * 0.35, h = 2.6 + (i % 3) * 0.5;
+      p.push(F(new THREE.CylinderGeometry(0.06, 0.07, h, 6).translate(x, h / 2, z), i % 2 ? 0x7ab84a : 0x8ac85a));
+      for (let k = 0.6; k < h; k += 0.6) p.push(F(new THREE.CylinderGeometry(0.075, 0.075, 0.05, 6).translate(x, k, z), 0x5a9a3a));
+      p.push(leaf(0.5, 0.12, 0.6, i * 1.3, h - 0.1, 0.05, 0x5cb848), leaf(0.45, 0.12, 0.6, i * 1.3 + 2, h - 0.25, 0.05, 0x4caa40));
+    }
+    D.bamboo = M(p);
+  }
+  D.ruinPillar = M([
+    F(new THREE.BoxGeometry(0.8, 0.25, 0.8).translate(0, 0.12, 0), 0x7f8a74),
+    F(new THREE.CylinderGeometry(0.3, 0.34, 1.7, 8).translate(0, 1.05, 0), 0x9aa08a),
+    F(new THREE.DodecahedronGeometry(0.3, 0).scale(1.2, 0.5, 1.2).translate(0, 1.95, 0), 0x4f9a3a),
+    F(new THREE.BoxGeometry(0.5, 0.35, 0.5).rotateZ(0.5).translate(0.6, 0.2, 0.4), 0x8a9480),
+    vine(0.28, 1.9, 0.12, 1.2)]);
+  {
+    const p = [], stone = [0x9a9a82, 0x8c8e76, 0xa4a48c, 0x92947c];
+    for (let t = 0; t < 4; t++) {
+      const w = 6 - t * 1.35;
+      p.push(F(new THREE.BoxGeometry(w, 1.0, w).translate(0, 0.5 + t, 0), stone[t]));
+      p.push(F(new THREE.BoxGeometry(w + 0.06, 0.12, w + 0.06).translate(0, 0.95 + t, 0), 0x4f9a3a));
+    }
+    p.push(F(new THREE.BoxGeometry(1.1, 4.0, 3.2).translate(0, 2.0, 1.6), 0x7c7e68));
+    for (let k = 0; k < 8; k++) p.push(F(new THREE.BoxGeometry(1.14, 0.08, 0.2).translate(0, 0.25 + k * 0.5, 3.2 - k * 0.38), 0x6a6c58));
+    p.push(F(new THREE.BoxGeometry(1.6, 1.3, 1.6).translate(0, 4.65, 0), 0xa8a890), F(prism(1.9, 0.7, 1.9).translate(0, 5.3, 0), 0x7c7e68),
+      F(new THREE.BoxGeometry(0.55, 0.8, 0.06).translate(0, 4.5, 0.81), 0x2a2a22));
+    D.stepPyramid = withGlow(M(p), [F(new THREE.BoxGeometry(0.3, 0.3, 0.05).translate(0, 4.6, 0.85), 0x9aff6a)]);
+  }
+  D.templeRuin = M([
+    F(new THREE.BoxGeometry(4.2, 0.3, 2.0).translate(0, 0.15, 0), 0x7f8a74),
+    F(new THREE.BoxGeometry(0.8, 3.0, 0.8).translate(-1.4, 1.8, 0), 0x9aa08a), F(new THREE.BoxGeometry(0.8, 3.0, 0.8).translate(1.4, 1.8, 0), 0x929882),
+    F(new THREE.BoxGeometry(3.8, 0.7, 1.0).rotateZ(0.06).translate(0, 3.6, 0), 0x8a907a),
+    F(new THREE.BoxGeometry(0.9, 0.6, 0.12).translate(0, 3.6, 0.52), 0x6a7060),
+    F(new THREE.BoxGeometry(0.14, 0.14, 0.06).translate(-0.22, 3.7, 0.6), 0x2a2a22), F(new THREE.BoxGeometry(0.14, 0.14, 0.06).translate(0.22, 3.7, 0.6), 0x2a2a22),
+    F(new THREE.DodecahedronGeometry(0.5, 0).scale(1.5, 0.4, 1.0).translate(0, 4.0, 0), 0x4f9a3a),
+    F(new THREE.DodecahedronGeometry(0.45, 0).scale(1.2, 0.8, 1).translate(2.2, 0.3, 0.8), 0x8a9480),
+    F(new THREE.BoxGeometry(0.7, 0.5, 0.7).rotateY(0.6).rotateZ(0.3).translate(-2.3, 0.35, 0.6), 0x929882),
+    vine(-1.0, 3.3, 0.5, 1.8), vine(0.7, 3.3, 0.5, 1.3), vine(1.75, 3.3, 0.2, 2.2),
+    ...fernParts(0.8, [0x3f9a3a, 0x52b048]).map((g) => g.translate(-1.9, 0.2, -0.6))]);
+  D.waterfall = withGlow(M([
+    F(new THREE.DodecahedronGeometry(2.0, 0).scale(1.4, 1.8, 0.9).translate(0, 2.6, -1.0), 0x7a8478),
+    F(new THREE.DodecahedronGeometry(1.4, 0).scale(1.3, 0.35, 0.9).translate(0, 5.6, -0.9), 0x4f9a3a),
+    F(new THREE.DodecahedronGeometry(1.1, 0).scale(1, 1.3, 0.9).translate(-2.0, 1.3, -0.4), 0x6e786c),
+    F(new THREE.DodecahedronGeometry(1.0, 0).scale(1, 1.1, 0.9).translate(2.0, 1.1, -0.3), 0x828c80),
+    F(new THREE.CylinderGeometry(2.0, 2.1, 0.04, 12).scale(1.3, 1, 0.8).translate(0, 0.02, 1.4), 0x2f9e98),
+    ...fernParts(0.9, [0x3f9a3a, 0x52b048]).map((g) => g.translate(2.6, 0.2, 1.2))]),
+  [F(new THREE.BoxGeometry(1.3, 4.6, 0.08).translate(0, 2.7, 0.5), 0xc8f4ff), F(new THREE.BoxGeometry(0.5, 4.6, 0.1).translate(0.2, 2.7, 0.55), 0xffffff),
+    F(new THREE.CylinderGeometry(0.9, 0.9, 0.06, 10).scale(1.3, 1, 0.6).translate(0, 0.05, 1.0), 0xe6fbff)]);
+  {
+    const p = [F(new THREE.CylinderGeometry(0.55, 0.9, 5.5, 8).translate(0, 2.75, 0), 0x6a4a2e)];
+    for (let i = 0; i < 5; i++) p.push(F(new THREE.BoxGeometry(0.18, 1.3, 1.1).translate(0, 0.65, 0.9).rotateY(i * 1.25), 0x5e4028));
+    for (const [x, y, z, r, c] of [[0, 6.0, 0, 2.2, 0x2a7a36], [1.6, 5.4, 0.8, 1.6, 0x3a9a44], [-1.5, 5.6, -0.6, 1.7, 0x348c3e], [0.3, 7.0, -0.2, 1.5, 0x46a84c], [-0.8, 5.2, 1.4, 1.3, 0x2f8a3a]]) p.push(F(new THREE.IcosahedronGeometry(r, 0).scale(1.2, 0.6, 1.2).translate(x, y, z), c));
+    p.push(vine(1.4, 5.0, 0.9, 2.5), vine(-1.2, 5.0, -0.7, 3.0), vine(-0.4, 5.0, 1.3, 2.0), vine(0.9, 5.0, -1.1, 2.8));
+    D.giantTree = M(p);
+  }
+  D.bambooFence = fence(0x9ac25a, 0x86b04a);
 
   D.cloud = mergeGeometries([
     plain(new THREE.IcosahedronGeometry(2.2, 1)),

@@ -24,11 +24,15 @@ const { chromium } = require('playwright');
     await p.waitForTimeout(350);
     await p.screenshot({ path: `${OUT}/t${w}.png` });
   }
-  const types = [['raider', 1], ['gunner', 2], ['nomad', 11], ['bandit', 12], ['knight', 21], ['frost', 22], ['skeleton', 31], ['demon', 32]];
+  const types = [['raider', 1], ['gunner', 2], ['nomad', 11], ['bandit', 12], ['knight', 21], ['frost', 22], ['skeleton', 31], ['demon', 32], ['tribal', 41], ['blowgun', 42]];
   for (const [type, L] of types) {
-    await p.evaluate(({ type, L }) => {
-      const G = window.__G; G.save.level = L; G.showMenu(); G.S.freeCam = true;
-      const e = G.LV.enemies.find(g => g.type === type) || G.LV.enemies[0];
+    const ok = await p.evaluate(({ type, L }) => {
+      const G = window.__G; let e = null;
+      for (let l = L; l < L + 10 && !e; l++) { // first level of that world that has a group of this type
+        G.save.level = l; G.showMenu(); G.S.freeCam = true;
+        e = G.LV.enemies.find(g => g.type === type);
+      }
+      if (!e) return false; // world for this type not in the level list yet: its troop would show another model
       for (const g of G.LV.enemies) { g.alive = g === e; }
       e.type = type; e.troop = e.troop; e.armed = true; e.alive = true; e.x = 0; e.z = 3; e.count = 2; e.sold.length = 0;
       e.sold.push({ x: -0.45, z: 3, k: 1, ph: 0, jx: 0, jz: 0 }, { x: 0.45, z: 3.6, k: 1, ph: 1, jx: 0, jz: 0 });
@@ -36,7 +40,9 @@ const { chromium } = require('playwright');
       G.squad.sold.length = 0; G.S.count = 0;
       const c = G.camera; c.position.set(-1.2, 1.25, 0.4); c.lookAt(0, 0.65, 3.2);
       window.__fixE = () => { e.sold[0].x = -0.45; e.sold[0].z = 3; e.sold[1].x = 0.45; e.sold[1].z = 3.6; e.x = 0; e.z = 3; };
+      return true;
     }, { type, L });
+    if (!ok) { console.log(`SKIP e-${type}: no '${type}' group in levels ${L}-${L + 9}`); continue; }
     await p.evaluate(() => window.__fixE());
     await p.waitForTimeout(350);
     await p.screenshot({ path: `${OUT}/e-${type}.png` });

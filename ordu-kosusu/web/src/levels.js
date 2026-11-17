@@ -13,6 +13,8 @@ export const ETYPES = {
   frost: { hp: 1.5, shoots: true, rate: 0.22, bullet: 0x8fe3ff, speed: 4 },
   skeleton: { hp: 2.0, shoots: false, speed: 5.0 },
   demon: { hp: 2.2, shoots: true, rate: 0.28, bullet: 0xff7a1a, speed: 4 },
+  tribal: { hp: 1.6, shoots: false, speed: 5.6 },         // jungle: fast spear runners
+  blowgun: { hp: 1.3, shoots: true, rate: 0.26, bullet: 0x7dff6a, speed: 4 },
 };
 
 // ============================================================ level generation (layout only;
@@ -33,9 +35,11 @@ export const isGood = (op) => op.k === 'add' || op.k === 'mul';
 // d: { good, mul, r, r2, h (harshness 0..1 for bad gates), big (tempting gate: × even for bigger armies) }
 export function makeOp(d, n) {
   if (d.good) {
-    if (d.mul && n < (d.big ? 70 : 25)) return { k: 'mul', v: n < 6 && d.r2 < 0.5 ? 3 : 2 };
-    if (d.big) return { k: 'add', v: nice(Math.max(5, n * (0.8 + d.r * 0.3) + 4)) };
-    return { k: 'add', v: nice(Math.max(3, n * (0.4 + d.r * 0.6) + 2 + d.r2 * 4)) };
+    // big armies grow slower (gates shrink from ~60 soldiers on, to 1/3 at 280+) so a lucky run can't snowball forever
+    const damp = clamp(1.2 - n / 300, 0.33, 1);
+    if (d.mul && n < (d.big ? 40 : 25)) return { k: 'mul', v: n < 6 && d.r2 < 0.5 ? 3 : 2 };
+    if (d.big) return { k: 'add', v: nice(Math.max(5, n * (0.6 + d.r * 0.25) * damp + 4)) };
+    return { k: 'add', v: nice(Math.max(3, n * (0.4 + d.r * 0.6) * damp + 2 + d.r2 * 4)) };
   }
   const h = d.h || 0;
   if (n < 4 || (d.mul && n > 6)) return { k: 'div', v: n > 12 && d.r2 < 0.3 + h * 0.4 ? 3 : 2 };
@@ -48,11 +52,13 @@ export const WORLD_FLAVOUR = [
   { shooter: 0.52, f: 0.92, traps: { spikes: 1.6, saw: 0.8, hammer: 0.6, roller: 0.5 } },   // desert: spike traps, bandit gunfire
   { shooter: 0.3, f: 1.0, traps: { roller: 1.7, hammer: 0.9, spikes: 0.6, saw: 0.5 } },     // snow: snowballs + tough knights
   { shooter: 0.45, f: 1.0, traps: { roller: 1.1, spikes: 1.1, hammer: 1.1, saw: 1.0 } },   // lava: everything
+  { shooter: 0.42, f: 1.0, traps: { coconut: 2.6, mud: 1.6, hammer: 0.6, roller: 0.5, spikes: 0.5, saw: 0.4 } }, // jungle: coconuts + mud
 ];
-// heat inside each 10-level world: gentle start, spike at x5, breather at x6, showdown at x10
-const HEAT = [0, 0, 0.8, 2.2, 3.4, 6.5, 3.6, 5.2, 6.4, 7.4, 9.5];
+// heat inside each 10-level world: gentle start, mild peak at x4 (x5 is the gold-run bonus level,
+// see bonus.js), breather at x6, showdown at x10
+const HEAT = [0, 0, 0.8, 2.2, 4.6, 3.0, 3.6, 5.2, 6.4, 7.4, 9.5];
 // when each mechanic first shows up (global level)
-export const UNLOCK = { saw: 2, hammer: 4, spikes: 8, roller: 13 };
+export const UNLOCK = { saw: 2, hammer: 4, spikes: 8, roller: 13, coconut: 41, mud: 41 };
 
 export function genLevel(L) {
   const th = themeFor(L);
@@ -64,8 +70,8 @@ export function genLevel(L) {
   const local = (L - 1) % 10 + 1, world = Math.floor((L - 1) / 10);
   const W = WORLD_FLAVOUR[Math.min(world, WORLD_FLAVOUR.length - 1)];
   // worlds add a modest offset so the in-world curve (breather at x6, peaks at x5/x10) survives in later worlds
-  const diff = Math.min(HEAT[local] + Math.min(world, 3) * 1.5, 15);
-  const spec = { th, gates: [], blocks: [], enemies: [], saws: [], coins: [], hammers: [], spikes: [], rollers: [], patterns: [] };
+  const diff = Math.min(HEAT[local] + [0, 1.5, 3, 4.5, 5.3][Math.min(world, 4)], 15.5);
+  const spec = { th, gates: [], blocks: [], enemies: [], saws: [], coins: [], hammers: [], spikes: [], rollers: [], drops: [], muds: [], patterns: [] };
   const has = (m) => L >= UNLOCK[m];
   const harsh = clamp((diff - 3) / 12, 0, 0.75);   // bad gates bite harder later, but one misread is never fatal on its own
 
@@ -104,10 +110,14 @@ export function genLevel(L) {
   };
   // rolling barrel / snowball / boulder: waits at z, starts rolling at the army when it gets close
   const roller = (x, z, o = {}) => spec.rollers.push({ x, z, speed: o.speed ?? R(4, 5.2) + Math.min(diff, 12) * 0.08, tf: o.tf ?? R(0.5, 1.1) });
+  // falling coconut: when the army gets close a shadow appears near it and the coconut lands ~1.1 s later
+  const drop = (z, o = {}) => spec.drops.push({ z, dx: o.dx ?? R(-1.3, 1.3), warn: o.warn ?? Math.max(0.95, 1.2 - diff * 0.012), r: 1.15 });
+  // mud strip: lanes of sticky mud that halve the army's speed (longer under fire)
+  const mud = (z, lanes, depth = 6) => spec.muds.push({ z, depth, tiles: lanes.map((x) => ({ x })) });
   const lane = () => pick([-3.3, -1.65, 0, 1.65, 3.3]);
   const trapW = (m) => (has(m) ? W.traps[m] || 0 : 0);
   const pickTrap = (exclude) => {
-    const opts = ['saw', 'hammer', 'spikes', 'roller'].filter((m) => m !== exclude && trapW(m) > 0);
+    const opts = ['saw', 'hammer', 'spikes', 'roller', 'coconut'].filter((m) => m !== exclude && trapW(m) > 0);
     if (!opts.length) return null;
     let tot = 0; for (const m of opts) tot += trapW(m);
     let r = rnd() * tot; for (const m of opts) { r -= trapW(m); if (r <= 0) return m; }
@@ -126,6 +136,11 @@ export function genLevel(L) {
         used.push(x); roller(x, z + 12 + k * R(5, 8), gentle ? { speed: 3.6, tf: 0.5 } : {});
       }
       return 18 + n * 4;
+    }
+    if (m === 'coconut') {
+      const n = gentle ? 2 : RI(3, diff > 8 ? 5 : 4);
+      for (let k = 0; k < n; k++) drop(z + k * R(6, 8), gentle ? { warn: 1.3 } : {});
+      return 16 + n * 7;
     }
     return 0;
   };
@@ -196,6 +211,16 @@ export function genLevel(L) {
       return z + 24 + (n - 1) * 7;
     } },
     rollerAlley: { min: 13, heat: 1, w: 1.0, tw: 'roller', build: (z) => z + trapPiece('roller', z, false) },
+    // jungle: coconuts drop where the army is heading, shadows warn first
+    coconutGrove: { min: UNLOCK.coconut, heat: 1, w: 1.1, tw: 'coconut', build: (z) => { coinLine(z - 6, R(-3, 3), 6); return z + trapPiece('coconut', z, false); } },
+    // jungle: mud on two lanes with blowgunners waiting behind (slower = longer under fire)
+    mudAmbush: { min: UNLOCK.mud, heat: 2, w: 1.0, tw: 'mud', build: (z) => {
+      const free = RI(0, 2), lanes = [-3.33, 0, 3.33].filter((_, i) => i !== free);
+      mud(z + 3, lanes, R(5, 7));
+      coinLine(z, [-3.33, 0, 3.33][free], 7, 0);
+      enemy(z + 20, { type: th.shooter, f: 0.75 });
+      return z + 20 + R(26, 29);
+    } },
     // soldiers + an ambush: melee charge with gunners right behind
     ambush: { min: 5, heat: 4, pos: 0.3, w: 1.0, build: (z) => {
       crate('soldier', pick([-2.6, 2.6]), z);
@@ -221,8 +246,8 @@ export function genLevel(L) {
   const plan = ['gate:good', 'crate:weapon', 'gate'];
   if (local >= 2 || world > 0) plan.push('fight'); else plan.push('gate');
   // newly unlocked mechanic: a gentle solo introduction early in the level
-  const fresh = ['hammer', 'spikes', 'roller'].find((m) => L === UNLOCK[m] || L === UNLOCK[m] + 1);
-  const signature = local <= 2 && world > 0 ? ['spikes', 'roller', 'hammer'][world - 1] : null;
+  const fresh = ['hammer', 'spikes', 'roller', 'coconut'].find((m) => L === UNLOCK[m] || L === UNLOCK[m] + 1);
+  const signature = local <= 2 && world > 0 ? ['spikes', 'roller', 'hammer', 'coconut'][Math.min(world, 4) - 1] : null;
   if (fresh || signature) plan.push('intro:' + (fresh || signature));
   const prevTrap = (p) => (PATTERNS[p] && PATTERNS[p].tw) || (p && p.startsWith('intro') ? 'x' : null);
   const fill = segs - 2;
@@ -230,7 +255,7 @@ export function genLevel(L) {
   const used = {};
   const GATEY = { gate: 1, gateFight: 1, tempt: 1 };
   const WALLY = { wall: 1, armory: 1, breach: 1 };
-  const TRAPPY = { sawGauntlet: 1, hammerRow: 1, spikeField: 1, rollerAlley: 1, gauntlet: 1, trapFight: 1, tempt: 1 };
+  const TRAPPY = { sawGauntlet: 1, hammerRow: 1, spikeField: 1, rollerAlley: 1, coconutGrove: 1, mudAmbush: 1, gauntlet: 1, trapFight: 1, tempt: 1 };
   const wantTraps = L < UNLOCK.hammer ? 0 : Math.min(5, 1 + Math.floor(diff / 3));
   let traps = 0;
   while (plan.length < fill) {
@@ -265,7 +290,7 @@ export function genLevel(L) {
   }
   // finale before the boss: x10 is a showdown, otherwise a gate decides the last fight
   if (local === 10) plan.push('gate:good', 'showdown');
-  else if (local === 5) plan.push('gate', 'ambushEnd');
+  else if (local === 4 && L > 10) plan.push('gate', 'ambushEnd');
   else plan.push('gateFight');
 
   let z = 26, prevK = null;

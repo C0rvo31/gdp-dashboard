@@ -26,6 +26,8 @@ const STYLE = {
     banner: 0x2a6fd8, banner2: 0xffffff, pole: 0x6a4a30, stone: 0xbfdcf2, stone2: 0x9cc0de, floor: 0xd8ecfa, flame: [0x6fd0ff, 0xe6faff] },
   lava: { post: 0x3a3036, stripe: 0xff6a1a, beam: 0x1a1418, light: 0xff7a1a, light2: 0xffc23a, cap: 0x2a2228, pillar: 0x1e181c, top: 'spikes',
     banner: 0x8a1a1a, banner2: 0xff7a1a, pole: 0x2a2228, stone: 0x3a3038, stone2: 0x2a2228, floor: 0x2e2428, flame: [0xff5a10, 0xffc23a] },
+  jungle: { post: 0xe8dcc0, stripe: 0x3fa848, beam: 0x3a2a1a, light: 0xc8ff5a, light2: 0xfff2a0, cap: 0x8a9a78, pillar: 0x6f7f5c, top: 'grass',
+    banner: 0x2f8a3a, banner2: 0xffc83a, pole: 0x6a4a2e, stone: 0x9aa08a, stone2: 0x7f8a74, floor: 0x8a9a6a, flame: [0xff8a2a, 0xffe07a] },
 };
 const st = (th) => STYLE[th.key] || STYLE.meadow;
 

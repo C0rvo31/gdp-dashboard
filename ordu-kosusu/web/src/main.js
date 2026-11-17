@@ -428,11 +428,14 @@ function resetWeather() {
 }
 function updateWeather(dt) {
   if (!weather.visible) return;
-  const cx = camera.position.x, cz = camera.position.z, snow = weatherKind === 'snow';
+  const cx = camera.position.x, cz = camera.position.z, snow = weatherKind === 'snow', ff = weatherKind === 'fireflies';
   for (let i = 0; i < WN; i++) {
     const o = i * 3;
     if (snow) { wPos[o + 1] -= (1.4 + (i % 5) * 0.25) * dt; wPos[o] += Math.sin(S.t * 1.3 + i) * 0.5 * dt; if (wPos[o + 1] < 0) wPos[o + 1] += 18; }
-    else { wPos[o + 1] += (1.0 + (i % 4) * 0.4) * dt; wPos[o] += Math.sin(S.t * 2 + i) * 0.3 * dt; if (wPos[o + 1] > 14) wPos[o + 1] -= 14; }
+    else if (ff) { // fireflies: slow low wandering
+      wPos[o] += Math.sin(S.t * 0.9 + i * 1.7) * 0.9 * dt; wPos[o + 2] += Math.cos(S.t * 0.7 + i * 2.3) * 0.9 * dt;
+      wPos[o + 1] += Math.sin(S.t * 1.6 + i * 0.37) * 0.6 * dt; if (wPos[o + 1] > 5.5) wPos[o + 1] -= 5; else if (wPos[o + 1] < 0.3) wPos[o + 1] += 0.5;
+    } else { wPos[o + 1] += (1.0 + (i % 4) * 0.4) * dt; wPos[o] += Math.sin(S.t * 2 + i) * 0.3 * dt; if (wPos[o + 1] > 14) wPos[o + 1] -= 14; }
     if (wPos[o + 2] < cz - 4) wPos[o + 2] += 64; else if (wPos[o + 2] > cz + 60) wPos[o + 2] -= 64;
     if (wPos[o] < cx - 22) wPos[o] += 44; else if (wPos[o] > cx + 22) wPos[o] -= 44;
   }
@@ -460,6 +463,7 @@ function applyTheme(th) {
   weather.visible = !!th.weather;
   if (th.weather === 'snow') { wMat.color.setHex(0xffffff); wMat.size = 0.24; wMat.blending = THREE.NormalBlending; }
   else if (th.weather === 'embers') { wMat.color.setHex(0xff9a3c); wMat.size = 0.18; wMat.blending = THREE.AdditiveBlending; }
+  else if (th.weather === 'fireflies') { wMat.color.setHex(0xc8ff5a); wMat.size = 0.22; wMat.blending = THREE.AdditiveBlending; }
   wMat.needsUpdate = true;
   resetWeather();
   document.body.style.background = '#' + th.skyBot.toString(16).padStart(6, '0');
@@ -1142,14 +1146,28 @@ function trapGeo() {
   const rock = mergeGeometries([F(new THREE.DodecahedronGeometry(ROLL_R + 0.05), 0x4a3530),
     F(new THREE.IcosahedronGeometry(0.2, 0).translate(0.5, 0.25, 0.3), 0xff7a1a),
     F(new THREE.IcosahedronGeometry(0.18, 0).translate(-0.45, -0.2, 0.42), 0xffc23a)]);
+  const log = mergeGeometries([
+    F(new THREE.CylinderGeometry(ROLL_R, ROLL_R, 1.45, 12).rotateZ(Math.PI / 2), 0x6b4a2f),
+    F(new THREE.CylinderGeometry(ROLL_R - 0.12, ROLL_R - 0.12, 1.47, 12).rotateZ(Math.PI / 2), 0xc89a5e),
+    F(new THREE.CylinderGeometry(ROLL_R + 0.03, ROLL_R + 0.03, 0.3, 12).rotateZ(Math.PI / 2).translate(-0.25, 0, 0), 0x3f8f2f),
+    F(new THREE.ConeGeometry(0.1, 0.35, 5).rotateZ(-0.6).translate(0.35, ROLL_R + 0.08, 0), 0x4c7a2a),
+  ]);
   TRAPG = { frame: mergeGeometries(frame), arm: mergeGeometries(arm), cones: mergeGeometries(cones), tileFrame: mergeGeometries(tileFrame),
-    plate: new THREE.BoxGeometry(SPIKE_W, 0.07, 2.0).translate(0, 0.035, 0), barrel, snow, rock };
+    plate: new THREE.BoxGeometry(SPIKE_W, 0.07, 2.0).translate(0, 0.035, 0), barrel, snow, rock, log };
+  TRAPG.coconut = mergeGeometries([F(new THREE.IcosahedronGeometry(0.42, 1), 0x6b4423),
+    F(new THREE.IcosahedronGeometry(0.4, 1).translate(0.38, 0.12, 0.1), 0x5a3a1e),
+    F(new THREE.ConeGeometry(0.12, 0.3, 5).translate(0.1, 0.5, 0), 0x3f8f2f)]);
+  TRAPG.ring = new THREE.RingGeometry(0.82, 1.15, 28).rotateX(-Math.PI / 2);
+  TRAPG.disc = new THREE.CircleGeometry(0.82, 24).rotateX(-Math.PI / 2);
+  const lumps = [F(new THREE.BoxGeometry(SPIKE_W, 0.05, 1).translate(0, 0.025, 0), 0x5b3a1e)];
+  for (let i = 0; i < 5; i++) lumps.push(F(new THREE.SphereGeometry(0.22, 7, 4).scale(1.4, 0.35, 0.8).translate(-1.2 + i * 0.6, 0.05, (i % 2 ? 0.25 : -0.2)), i % 2 ? 0x4a2f17 : 0x6e4826));
+  TRAPG.mud = mergeGeometries(lumps);
   return TRAPG;
 }
 
 function buildTraps(spec, grp, keep, th) {
   const TG = trapGeo();
-  LV.hammers = []; LV.spikes = []; LV.rollers = [];
+  LV.hammers = []; LV.spikes = []; LV.rollers = []; LV.drops = []; LV.muds = []; LV.trapSpeed = spec.speed;
   for (const hs of spec.hammers || []) {
     const frame = new THREE.Mesh(TG.frame, MAT.decor); frame.position.set(0, 0, hs.z); grp.add(frame);
     const arm = new THREE.Mesh(TG.arm, MAT.decor); arm.position.set(hs.cx, HAM_PIV, hs.z); grp.add(arm);
@@ -1166,7 +1184,7 @@ function buildTraps(spec, grp, keep, th) {
     });
     LV.spikes.push({ ...ss, tiles });
   }
-  const rgeo = th.key === 'snow' ? TG.snow : th.key === 'lava' ? TG.rock : TG.barrel;
+  const rgeo = th.key === 'snow' ? TG.snow : th.key === 'lava' ? TG.rock : th.key === 'jungle' ? TG.log : TG.barrel;
   for (const rs of spec.rollers || []) {
     const m = new THREE.Mesh(rgeo, MAT.decor); m.position.set(rs.x, ROLL_R, rs.z); grp.add(m);
     const r = { ...rs, kind: 'roller', w: 1.4, d: 1.4, hp: 1, max: 1, alive: true, armed: false, rolling: false, mesh: m, wob: 0 };
@@ -1177,6 +1195,18 @@ function buildTraps(spec, grp, keep, th) {
     r.sprite = new THREE.Sprite(keep(new THREE.SpriteMaterial({ map: r.label.tex, transparent: true, depthTest: false, fog: false })));
     r.sprite.scale.set(2.0, 1.0, 1); r.sprite.renderOrder = 19; r.sprite.visible = false; grp.add(r.sprite);
     LV.rollers.push(r);
+  }
+  // jungle: falling coconuts (shadow ring warns first) and mud strips
+  for (const ds of spec.drops || []) {
+    const ringMat = keep(new THREE.MeshBasicMaterial({ color: 0xff4650, transparent: true, opacity: 0, depthWrite: false }));
+    const ring = new THREE.Mesh(TG.ring, ringMat); ring.visible = false; grp.add(ring);
+    const disc = new THREE.Mesh(TG.disc, MAT.shadow); disc.visible = false; grp.add(disc);
+    const nut = new THREE.Mesh(TG.coconut, MAT.decor); nut.visible = false; grp.add(nut);
+    LV.drops.push({ ...ds, x: 0, t: 0, state: 'wait', ring, ringMat, disc, nut });
+  }
+  for (const ms of spec.muds || []) {
+    for (const t of ms.tiles) { const m = new THREE.Mesh(TG.mud, MAT.decor); m.scale.z = ms.depth; m.position.set(t.x, 0.005, ms.z); grp.add(m); }
+    LV.muds.push(ms);
   }
 }
 
@@ -1222,11 +1252,51 @@ function animateTraps(dt) {
   }
 }
 
+// coconuts land where the army is heading ~1 s after their shadow appears; mud halves the march speed
+function updateJungleTraps(dt, d) {
+  for (const c of LV.drops) {
+    if (c.state === 'done') continue;
+    if (c.state === 'wait') {
+      // trigger so that the landing happens just as the front rows reach the spot
+      if (squad.z < c.z - squad.speed * c.warn + 1) continue;
+      c.state = 'warn'; c.t = 0;
+      c.x = clamp(squad.x + c.dx, -(HALF - 0.8), HALF - 0.8);
+      c.ring.position.set(c.x, 0.03, c.z); c.disc.position.set(c.x, 0.025, c.z);
+      c.ring.visible = c.disc.visible = true;
+    }
+    c.t += dt;
+    const p = Math.min(1, c.t / c.warn);
+    c.ringMat.opacity = 0.35 + 0.5 * Math.abs(Math.sin(c.t * 14));
+    c.ring.scale.setScalar(0.55 + 0.45 * p); c.disc.scale.setScalar(0.4 + 0.9 * p);
+    const fall = (c.t - (c.warn - 0.4)) / 0.4;
+    if (fall > 0) { c.nut.visible = true; c.nut.position.set(c.x, lerp(10, 0.42, Math.min(1, fall * fall)), c.z); c.nut.rotation.x += dt * 9; }
+    if (c.t < c.warn) continue;
+    c.state = 'done'; c.ring.visible = c.disc.visible = c.nut.visible = false;
+    burst(c.x, 0.5, c.z, 0x6b4423, 14, 5, 1.1, 18, 5); burst(c.x, 0.4, c.z, 0xf4ead2, 6, 3, 0.7, 18, 3);
+    sfx.play('slam'); S.shake = Math.max(S.shake, 0.3);
+    for (let i = squad.sold.length - 1; i >= 0; i--) {
+      const s = squad.sold[i];
+      if (s && (s.x - c.x) * (s.x - c.x) + (s.z - c.z) * (s.z - c.z) < c.r * c.r) {
+        S.cause = 'coconut'; killSoldier(i);
+        if (S.state !== 'play') return;
+      }
+    }
+  }
+  if (LV.muds.length) {
+    const mid = squad.z - Math.min(d.depth, 3) * 0.5;
+    const inMud = LV.muds.some((m) => Math.abs(mid - m.z) < m.depth / 2 && m.tiles.some((t) => Math.abs(squad.x - t.x) < SPIKE_W / 2));
+    squad.speed = LV.trapSpeed * (inMud ? 0.5 : 1);
+    if (inMud && Math.random() < dt * 12) burst(squad.x + (Math.random() - 0.5) * d.hw * 2, 0.15, squad.z, 0x5b3a1e, 1, 2, 0.6, 14, 2);
+  }
+}
+
 function updateTraps(dt) {
   if (!LV.hammers) return;
   animateTraps(dt);
   if (S.state !== 'play') return;
   const d = dims(S.count), front = squad.z + 1.5, back = squad.z - d.depth - 1.5;
+  updateJungleTraps(dt, d);
+  if (S.state !== 'play') return;
   for (const h of LV.hammers) {
     if (h.hy > 1.2) h.hits = 0;                 // each low swing knocks down at most 6 soldiers
     if (h.z > front || h.z < back || h.hy > 1.2 || h.hits >= 6) continue;
