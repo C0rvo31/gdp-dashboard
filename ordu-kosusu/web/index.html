@@ -19,7 +19,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
 .hidden{display:none!important}
 
 /* HUD */
-#hud{position:fixed;left:0;right:0;top:0;padding:var(--safe-top) 12px 0;display:flex;align-items:center;gap:10px;pointer-events:none}
+#hud{position:fixed;left:0;right:0;top:0;padding:var(--safe-top) max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));display:flex;align-items:center;gap:10px;pointer-events:none}
 .pill{background:rgba(16,30,60,.55);color:#fff;border-radius:999px;padding:7px 14px;font-weight:900;font-size:15px;letter-spacing:.5px;display:flex;align-items:center;gap:7px;backdrop-filter:blur(4px)}
 .coin{width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff3b0,var(--gold) 45%,var(--gold-d));box-shadow:inset 0 -2px 0 rgba(0,0,0,.18)}
 #btnGear{width:40px;height:40px;border-radius:50%;border:0;background:rgba(16,30,60,.55);color:#fff;font-size:20px;display:grid;place-items:center;pointer-events:auto}
@@ -30,19 +30,63 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
 #bossBar .bar{margin-top:5px;height:14px;border-radius:10px;background:rgba(40,0,0,.5);border:2px solid #fff;overflow:hidden}
 #bossBar .bar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#ff7a59,#ff2d44);transition:width .12s}
 
-#toast{position:fixed;left:50%;top:30%;transform:translate(-50%,-50%) scale(.6);opacity:0;font-weight:900;font-size:34px;color:#fff;text-shadow:0 3px 0 #1b5fd1,0 6px 14px rgba(0,0,0,.3);white-space:nowrap;pointer-events:none;transition:transform .25s cubic-bezier(.2,1.6,.4,1),opacity .25s}
+#toast{position:fixed;left:50%;top:30%;transform:translate(-50%,-50%) scale(.6);opacity:0;font-weight:900;font-size:clamp(26px,8.4vw,34px);color:#fff;letter-spacing:1px;padding:6px 22px;border-radius:18px;background:linear-gradient(rgba(47,140,255,.85),rgba(27,95,209,.85));border:2px solid rgba(255,255,255,.7);text-shadow:0 2px 0 rgba(0,0,0,.25);box-shadow:0 5px 0 rgba(10,40,100,.35),0 10px 24px rgba(0,0,0,.25);white-space:nowrap;pointer-events:none;transition:transform .25s cubic-bezier(.2,1.6,.4,1),opacity .25s;max-width:94vw}
 #toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
-#toast.bad{text-shadow:0 3px 0 #b3202c,0 6px 14px rgba(0,0,0,.3)}
+#toast.bad{background:linear-gradient(rgba(255,90,90,.88),rgba(190,32,44,.88));box-shadow:0 5px 0 rgba(90,10,20,.4),0 10px 24px rgba(0,0,0,.25)}
+
+/* juice */
+#fx{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+#fx .fl{position:absolute;left:50%;top:48%;font-weight:900;font-size:clamp(28px,9vw,40px);color:#fff;white-space:nowrap;-webkit-text-stroke:1px rgba(0,0,0,.25);text-shadow:0 3px 0 #1b5fd1,0 6px 12px rgba(0,0,0,.3);animation:floatUp .95s cubic-bezier(.2,.8,.3,1) forwards;will-change:transform,opacity}
+#fx .fl.bad{text-shadow:0 3px 0 #b3202c,0 6px 12px rgba(0,0,0,.3)}
+#fx .fl.gold{color:var(--gold);text-shadow:0 3px 0 #c66d00,0 6px 12px rgba(0,0,0,.3)}
+@keyframes floatUp{0%{transform:translate(-50%,0) scale(.5);opacity:0}15%{transform:translate(-50%,-14px) scale(1.25);opacity:1}30%{transform:translate(-50%,-26px) scale(1)}100%{transform:translate(-50%,-120px) scale(.9);opacity:0}}
+#pulse{position:fixed;inset:0;pointer-events:none;opacity:0;box-shadow:inset 0 0 90px 24px rgba(255,255,255,.7)}
+#pulse.good{box-shadow:inset 0 0 90px 24px rgba(80,220,140,.55)}
+#pulse.bad{box-shadow:inset 0 0 90px 24px rgba(255,50,60,.6)}
+#pulse.go{animation:pulse .38s ease-out}
+@keyframes pulse{0%{opacity:1}100%{opacity:0}}
+.pill.bump{animation:bump .22s ease-out}
+@keyframes bump{0%{transform:scale(1)}40%{transform:scale(1.2)}100%{transform:scale(1)}}
+#splash{position:fixed;left:0;right:0;top:26%;text-align:center;pointer-events:none;color:#fff;font-weight:900;opacity:0}
+#splash small{display:block;font-size:clamp(16px,5vw,20px);letter-spacing:3px;text-shadow:0 2px 0 rgba(0,0,0,.35);color:var(--gold)}
+#splash b{display:block;font-size:clamp(44px,14vw,64px);letter-spacing:2px;line-height:1;margin-top:4px;text-shadow:0 4px 0 var(--blue-d),0 9px 0 rgba(10,40,100,.35),0 14px 26px rgba(0,0,0,.3)}
+#splash.go{animation:splash 2.1s cubic-bezier(.2,1.2,.4,1) forwards}
+@keyframes splash{0%{opacity:0;transform:scale(.4)}15%{opacity:1;transform:scale(1.12)}25%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:scale(1.1) translateY(-20px)}}
+#wpn{position:fixed;left:50%;top:27%;transform:translateX(-50%);pointer-events:none;display:flex;align-items:center;gap:12px;background:var(--panel);border-radius:20px;padding:10px 20px 10px 12px;box-shadow:0 6px 0 rgba(10,30,70,.28),0 14px 30px rgba(0,0,0,.25);opacity:0;white-space:nowrap}
+#wpn .wi{width:54px;height:54px;border-radius:14px;display:grid;place-items:center;background:#eaf2ff}
+#wpn .wi svg{width:40px;height:40px}
+#wpn small{display:block;font-size:11px;font-weight:900;letter-spacing:1.5px;color:#1b9a4a}
+#wpn b{display:block;font-size:24px;font-weight:900;letter-spacing:1px;line-height:1.1}
+#wpn.go{animation:wpn 1.2s cubic-bezier(.2,1.4,.4,1) forwards}
+@keyframes wpn{0%{opacity:0;transform:translateX(-50%) translateY(20px) scale(.6)}18%{opacity:1;transform:translateX(-50%) scale(1.08)}30%{transform:translateX(-50%) scale(1)}80%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-16px)}}
+#tutorial{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translateX(-50%);width:min(88vw,340px);pointer-events:none;display:flex;flex-direction:column;gap:8px;align-items:center;animation:tutIn .4s ease-out,tutOut .6s ease-in 7s forwards}
+#tutorial div{background:rgba(16,30,60,.72);color:#fff;font-weight:800;font-size:14px;border-radius:14px;padding:8px 14px;text-align:center;backdrop-filter:blur(4px);width:100%}
+@keyframes tutIn{from{opacity:0;transform:translate(-50%,16px)}}
+@keyframes tutOut{to{opacity:0}}
 
 /* Menu */
-#menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:calc(var(--safe-top) + 64px) 16px 22px;pointer-events:none}
-#title{text-align:center;pointer-events:none}
+#menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:calc(var(--safe-top) + 64px) max(16px,env(safe-area-inset-right)) calc(22px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));pointer-events:none}
+#title{text-align:center;pointer-events:none;display:flex;flex-direction:column;align-items:center}
+#title h1{padding:6px 0 2px}
 #title h1{margin:0;font-size:clamp(40px,12vw,64px);line-height:.92;font-weight:900;color:#fff;letter-spacing:1px;
-  text-shadow:0 4px 0 var(--blue-d),0 8px 0 rgba(10,40,100,.35),0 12px 24px rgba(0,0,0,.25);transform:rotate(-3deg)}
+  text-shadow:0 4px 0 var(--blue-d),0 8px 0 rgba(10,40,100,.35),0 12px 24px rgba(0,0,0,.25);transform:rotate(-3deg);animation:titleBob 3s ease-in-out infinite}
 #title h1 span{color:var(--gold);text-shadow:0 4px 0 #c66d00,0 8px 0 rgba(90,40,0,.35),0 12px 24px rgba(0,0,0,.25)}
-#title p{margin:14px 0 0;font-weight:800;color:#fff;font-size:15px;text-shadow:0 2px 0 rgba(0,0,0,.3)}
+@keyframes titleBob{0%,100%{transform:rotate(-3deg) translateY(0) scale(1)}50%{transform:rotate(-2deg) translateY(-5px) scale(1.03)}}
+#title h1 span{display:inline-block;animation:shine 2.4s ease-in-out infinite}
+@keyframes shine{0%,100%{filter:brightness(1)}50%{filter:brightness(1.18)}}
+#world{margin:14px auto 0;display:inline-flex;flex-direction:column;align-items:center;gap:7px;background:rgba(16,30,60,.5);backdrop-filter:blur(4px);border-radius:18px;padding:8px 16px;color:#fff}
+#world b{font-size:16px;font-weight:900;letter-spacing:1.5px}
+#world b small{font-size:12px;opacity:.75;font-weight:800;letter-spacing:.5px;margin-left:6px}
+#dots{display:flex;gap:5px}
+#dots i{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,.28);border:2px solid rgba(255,255,255,.55)}
+#dots i.done{background:#5be38a;border-color:#fff}
+#dots i.cur{background:var(--gold);border-color:#fff;animation:dotPulse 1s ease-in-out infinite}
+#dots i.boss{border-radius:4px}
+@keyframes dotPulse{50%{transform:scale(1.35)}}
+#title p{margin:18px auto 0;max-width:300px;line-height:1.25;text-wrap:balance;background:rgba(16,30,60,.4);border-radius:14px;padding:6px 12px;font-weight:800;color:#fff;font-size:15px;text-shadow:0 2px 0 rgba(0,0,0,.3)}
 #bottom{width:100%;display:flex;flex-direction:column;align-items:center;gap:16px}
-#startHint{display:flex;flex-direction:column;align-items:center;gap:8px;color:#fff;font-weight:900;font-size:18px;text-shadow:0 2px 0 rgba(0,0,0,.35);pointer-events:none}
+#startHint{animation:hintPulse 1.6s ease-in-out infinite;display:flex;flex-direction:column;align-items:center;gap:8px;color:#fff;font-weight:900;font-size:18px;text-shadow:0 2px 0 rgba(0,0,0,.35);pointer-events:none}
+@keyframes hintPulse{50%{opacity:.7}}
 .hand{width:64px;height:24px;position:relative}
 .hand::before{content:"";position:absolute;left:50%;top:0;width:26px;height:26px;margin-left:-13px;border-radius:50%;background:#fff;box-shadow:0 3px 0 rgba(0,0,0,.25);animation:swipe 1.6s ease-in-out infinite}
 .hand::after{content:"";position:absolute;left:0;right:0;top:11px;height:4px;border-radius:4px;background:rgba(255,255,255,.45)}
@@ -54,19 +98,38 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
 .up .ic svg{width:30px;height:30px}
 .up b{display:block;font-size:13px;font-weight:900}
 .up small{display:block;font-size:11px;font-weight:700;opacity:.6;margin-top:1px}
+.up .nx{display:block;font-size:11px;font-weight:900;color:#1b9a4a;margin-top:2px;min-height:14px}
+.up .nx::before{content:"\2192 "}
+.up.max .nx::before{content:""}
+.up .lv{display:flex;gap:2px;justify-content:center;margin-top:5px}
+.up .lv i{width:7px;height:5px;border-radius:2px;background:#d3dcec}
+.up .lv i.on{background:var(--blue)}
+.up.flash{animation:upFlash .45s ease-out}
+@keyframes upFlash{0%{transform:scale(1)}30%{transform:scale(1.09);box-shadow:0 5px 0 rgba(10,30,70,.25),0 0 0 4px var(--gold)}100%{transform:scale(1)}}
 .up .cost{margin-top:6px;display:flex;align-items:center;justify-content:center;gap:5px;font-weight:900;font-size:14px;background:#eaf2ff;border-radius:10px;padding:4px}
 .up .cost .coin{width:14px;height:14px}
 .up.poor .cost{opacity:.45}
+.up:not(.poor):not(.max) .cost{background:#fff1c4;animation:afford 1.6s ease-in-out infinite}
+@keyframes afford{50%{background:#ffe08a}}
 .up.max .cost{background:#e7f8ec}
 
 /* Panels */
-.overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(10,25,55,.35);padding:16px}
+.overlay{z-index:5;position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(10,25,55,.35);padding:16px}
 .card{background:var(--panel);border-radius:26px;padding:26px 22px 22px;width:100%;max-width:360px;text-align:center;box-shadow:0 8px 0 rgba(10,30,70,.25),0 20px 50px rgba(0,0,0,.25);animation:pop .35s cubic-bezier(.2,1.5,.4,1)}
 @keyframes pop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
 .card h2{margin:0;font-size:40px;font-weight:900;letter-spacing:1px}
 .card h2.win{color:var(--blue);text-shadow:0 3px 0 #bcd8ff}
 .card h2.lose{color:var(--red);text-shadow:0 3px 0 #ffd0d0}
 .card .sub{font-weight:800;opacity:.65;margin:6px 0 16px}
+.stars{display:flex;justify-content:center;gap:6px;margin:2px 0 12px}
+.stars svg{width:52px;height:52px;transform:scale(0) rotate(-40deg);filter:grayscale(1) opacity(.35)}
+.stars svg.on{filter:none;animation:starIn .5s cubic-bezier(.2,1.8,.4,1) forwards;animation-delay:var(--d,0s)}
+.stars svg.off{animation:starOff .3s ease-out forwards;animation-delay:var(--d,0s)}
+.stars svg:nth-child(2){margin-top:-8px}
+@keyframes starIn{to{transform:scale(1) rotate(0)}}
+@keyframes starOff{to{transform:scale(.8)}}
+.tip{background:#fff6d9;border-radius:14px;padding:9px 12px;font-weight:800;font-size:13px;margin:-4px 0 14px;color:#6a4a00}
+.reward.cnt{animation:none}
 .reward{display:flex;align-items:center;justify-content:center;gap:10px;font-size:34px;font-weight:900;margin:4px 0 18px}
 .reward .coin{width:32px;height:32px}
 .stats{display:flex;gap:8px;margin-bottom:18px}
@@ -100,29 +163,34 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
   </div>
 
   <div id="bossBar" class="hidden">DEV<div class="bar"><i></i></div></div>
+  <div id="fx"></div>
+  <div id="pulse"></div>
   <div id="toast"></div>
+  <div id="splash"><small>YENİ BÖLÜM</small><b></b></div>
+  <div id="wpn"><div class="wi"></div><div><small>YENİ SİLAH</small><b></b></div></div>
 
   <div id="menu">
     <div id="title">
       <h1>ORDU<br><span>KOŞUSU</span></h1>
       <p>Askerlerini topla, silahını güçlendir, devi yen!</p>
+      <div id="world"><b><span id="wName">ÇAYIR</span><small id="wLv">SEVİYE 1</small></b><div id="dots"></div></div>
     </div>
     <div id="bottom">
     <div id="startHint"><div class="hand"></div>BAŞLAMAK İÇİN KAYDIR</div>
     <div id="upgrades">
       <button class="up" data-up="upStart">
         <div class="ic" style="background:#dcebff"><svg viewBox="0 0 24 24"><circle cx="12" cy="6.5" r="3.5" fill="#f2c39a"/><path d="M6 21v-6a6 6 0 0 1 12 0v6z" fill="#2f8cff"/><path d="M8.3 5.5a3.8 3.8 0 0 1 7.4 0z" fill="#1b5fd1"/></svg></div>
-        <b>ASKER</b><small>Başlangıç: <span data-v>1</span></small>
+        <b>ASKER</b><small>Başlangıç: <span data-v>1</span></small><span class="nx" data-n></span><div class="lv"></div>
         <div class="cost"><span class="coin"></span><span data-c>0</span></div>
       </button>
       <button class="up" data-up="upRate">
         <div class="ic" style="background:#fff1d6"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" fill="#ffb020"/></svg></div>
-        <b>ATEŞ HIZI</b><small>Seviye <span data-v>1</span></small>
+        <b>ATEŞ HIZI</b><small>Seviye <span data-v>1</span></small><span class="nx" data-n></span><div class="lv"></div>
         <div class="cost"><span class="coin"></span><span data-c>0</span></div>
       </button>
       <button class="up" data-up="upDmg">
         <div class="ic" style="background:#ffe1e1"><svg viewBox="0 0 24 24"><path d="M3 9h12l2-2h3v4h-2v2h-5l-1 2h-3l-1 5H5l1-5H3z" fill="#e5484d"/></svg></div>
-        <b>GÜÇ</b><small>Seviye <span data-v>1</span></small>
+        <b>GÜÇ</b><small>Seviye <span data-v>1</span></small><span class="nx" data-n></span><div class="lv"></div>
         <div class="cost"><span class="coin"></span><span data-c>0</span></div>
       </button>
     </div>
@@ -132,6 +200,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
   <div id="winPanel" class="overlay hidden">
     <div class="card">
       <h2 class="win">ZAFER!</h2>
+      <div class="stars" id="stars"><svg viewBox="0 0 24 24"><path d="M12 1.8l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.5 5.7 21.2l1.5-7.1L1.8 9.2 9 8.4z" fill="#ffc83a" stroke="#e09a00" stroke-width="1.2" stroke-linejoin="round"/></svg><svg viewBox="0 0 24 24"><path d="M12 1.8l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.5 5.7 21.2l1.5-7.1L1.8 9.2 9 8.4z" fill="#ffc83a" stroke="#e09a00" stroke-width="1.2" stroke-linejoin="round"/></svg><svg viewBox="0 0 24 24"><path d="M12 1.8l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.5 5.7 21.2l1.5-7.1L1.8 9.2 9 8.4z" fill="#ffc83a" stroke="#e09a00" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
       <div class="sub" id="winSub">Seviye tamamlandı</div>
       <div class="stats"><div>Kalan Asker<b id="wSold">0</b></div><div>Toplanan<b id="wColl">0</b></div></div>
       <div class="reward"><span class="coin"></span>+<span id="wCoins">0</span></div>
@@ -144,13 +213,14 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
       <h2 class="lose">YENİLDİN</h2>
       <div class="sub" id="loseSub">Ordun dağıldı!</div>
       <div class="reward"><span class="coin"></span>+<span id="lCoins">0</span></div>
+      <div class="tip" id="loseTip">İpucu</div>
       <button class="btn" id="btnRetry">TEKRAR DENE</button>
     </div>
   </div>
 
   <div id="settings" class="overlay hidden">
     <div class="card">
-      <h2 style="font-size:30px;margin-bottom:8px">AYARLAR</h2>
+      <h2 id="setTitle" style="font-size:30px;margin-bottom:8px">AYARLAR</h2>
       <div class="row"><div>Ses</div><button class="tog" data-set="sound"></button></div>
       <div class="row"><div>Titreşim</div><button class="tog" data-set="vibe"></button></div>
       <div class="row"><div>Pil Tasarrufu<small>30 FPS, daha düşük çözünürlük</small></div><button class="tog" data-set="eco"></button></div>
