@@ -400,11 +400,14 @@ function resetWeather() {
 }
 function updateWeather(dt) {
   if (!weather.visible) return;
-  const cx = camera.position.x, cz = camera.position.z, snow = weatherKind === 'snow';
+  const cx = camera.position.x, cz = camera.position.z, snow = weatherKind === 'snow', ff = weatherKind === 'fireflies';
   for (let i = 0; i < WN; i++) {
     const o = i * 3;
     if (snow) { wPos[o + 1] -= (1.4 + (i % 5) * 0.25) * dt; wPos[o] += Math.sin(S.t * 1.3 + i) * 0.5 * dt; if (wPos[o + 1] < 0) wPos[o + 1] += 18; }
-    else { wPos[o + 1] += (1.0 + (i % 4) * 0.4) * dt; wPos[o] += Math.sin(S.t * 2 + i) * 0.3 * dt; if (wPos[o + 1] > 14) wPos[o + 1] -= 14; }
+    else if (ff) { // fireflies: slow low wandering
+      wPos[o] += Math.sin(S.t * 0.9 + i * 1.7) * 0.9 * dt; wPos[o + 2] += Math.cos(S.t * 0.7 + i * 2.3) * 0.9 * dt;
+      wPos[o + 1] += Math.sin(S.t * 1.6 + i * 0.37) * 0.6 * dt; if (wPos[o + 1] > 5.5) wPos[o + 1] -= 5; else if (wPos[o + 1] < 0.3) wPos[o + 1] += 0.5;
+    } else { wPos[o + 1] += (1.0 + (i % 4) * 0.4) * dt; wPos[o] += Math.sin(S.t * 2 + i) * 0.3 * dt; if (wPos[o + 1] > 14) wPos[o + 1] -= 14; }
     if (wPos[o + 2] < cz - 4) wPos[o + 2] += 64; else if (wPos[o + 2] > cz + 60) wPos[o + 2] -= 64;
     if (wPos[o] < cx - 22) wPos[o] += 44; else if (wPos[o] > cx + 22) wPos[o] -= 44;
   }
@@ -432,6 +435,7 @@ function applyTheme(th) {
   weather.visible = !!th.weather;
   if (th.weather === 'snow') { wMat.color.setHex(0xffffff); wMat.size = 0.24; wMat.blending = THREE.NormalBlending; }
   else if (th.weather === 'embers') { wMat.color.setHex(0xff9a3c); wMat.size = 0.18; wMat.blending = THREE.AdditiveBlending; }
+  else if (th.weather === 'fireflies') { wMat.color.setHex(0xc8ff5a); wMat.size = 0.22; wMat.blending = THREE.AdditiveBlending; }
   wMat.needsUpdate = true;
   resetWeather();
   document.body.style.background = '#' + th.skyBot.toString(16).padStart(6, '0');
