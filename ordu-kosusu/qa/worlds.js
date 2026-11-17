@@ -27,14 +27,14 @@ const { chromium, devices } = require('playwright');
     };
   });
   const enemyNear = 'G => G.LV.enemies.some(e => e.alive && e.armed && e.z - G.squad.z < 17 && e.z - G.squad.z > 9)';
-  for (const L of [1, 11, 21, 31]) {
+  for (const L of [1, 11, 21, 31, 41, 51]) {
     const ok = await p.evaluate(`window.__run(${L}, ${enemyNear}, G => { G.S.count = 60; })`);
     await p.waitForTimeout(500);
     await p.screenshot({ path: `${OUT}/w${L}.png` });
     console.log(L, ok, await p.evaluate(() => JSON.stringify({ st: window.__G.S.state, c: window.__G.S.count, types: window.__G.LV.enemies.map(e => e.type).join(',') })));
   }
   // boss scenes for desert and lava
-  for (const L of [11, 31]) {
+  for (const L of [11, 31, 51]) {
     await p.evaluate(`window.__run(${L}, G => G.S.state === 'boss' && G.LV.boss.state === 'attack', G => { G.S.count = 80; G.setWeapon(4); for (const e of G.LV.enemies) e.alive = false; G.squad.z = G.LV.bossLine - 2; })`);
     await p.waitForTimeout(500);
     await p.screenshot({ path: `${OUT}/b${L}.png` });

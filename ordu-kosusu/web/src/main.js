@@ -444,10 +444,13 @@ function resetWeather() {
 }
 function updateWeather(dt) {
   if (!weather.visible) return;
-  const cx = camera.position.x, cz = camera.position.z, snow = weatherKind === 'snow', ff = weatherKind === 'fireflies';
+  const cx = camera.position.x, cz = camera.position.z, snow = weatherKind === 'snow', ff = weatherKind === 'fireflies', sp = weatherKind === 'sparks';
   for (let i = 0; i < WN; i++) {
     const o = i * 3;
     if (snow) { wPos[o + 1] -= (1.4 + (i % 5) * 0.25) * dt; wPos[o] += Math.sin(S.t * 1.3 + i) * 0.5 * dt; if (wPos[o + 1] < 0) wPos[o + 1] += 18; }
+    else if (sp) { // factory sparks: rise fast, flicker sideways, drift with the wind
+      wPos[o + 1] += (1.2 + (i % 5) * 0.5) * dt; wPos[o] += (0.7 + Math.sin(S.t * 5 + i * 3.1) * 0.8) * dt; wPos[o + 2] += Math.cos(S.t * 4 + i * 1.3) * 0.4 * dt; if (wPos[o + 1] > 10) wPos[o + 1] -= 10;
+    }
     else if (ff) { // fireflies: slow low wandering
       wPos[o] += Math.sin(S.t * 0.9 + i * 1.7) * 0.9 * dt; wPos[o + 2] += Math.cos(S.t * 0.7 + i * 2.3) * 0.9 * dt;
       wPos[o + 1] += Math.sin(S.t * 1.6 + i * 0.37) * 0.6 * dt; if (wPos[o + 1] > 5.5) wPos[o + 1] -= 5; else if (wPos[o + 1] < 0.3) wPos[o + 1] += 0.5;
@@ -480,6 +483,7 @@ function applyTheme(th) {
   if (th.weather === 'snow') { wMat.color.setHex(0xffffff); wMat.size = 0.24; wMat.blending = THREE.NormalBlending; }
   else if (th.weather === 'embers') { wMat.color.setHex(0xff9a3c); wMat.size = 0.18; wMat.blending = THREE.AdditiveBlending; }
   else if (th.weather === 'fireflies') { wMat.color.setHex(0xc8ff5a); wMat.size = 0.22; wMat.blending = THREE.AdditiveBlending; }
+  else if (th.weather === 'sparks') { wMat.color.setHex(0xffa23a); wMat.size = 0.17; wMat.blending = THREE.AdditiveBlending; }
   wMat.needsUpdate = true;
   resetWeather();
   document.body.style.background = '#' + th.skyBot.toString(16).padStart(6, '0');
@@ -766,6 +770,7 @@ const BOSS_ATK = {
   yeti: { T: 2.2, base: 2.5, pct: 0.08, hp: 1.1 },
   demon: { T: 1.8, base: 2.5, pct: 0.07, hp: 1.15 },
   gorilla: { T: 2.0, base: 4, pct: 0.08, hp: 1.25 },
+  mech: { T: 1.7, base: 3.2, pct: 0.075, hp: 1.35 },
 };
 function bossAtk(b) { const A = BOSS_ATK[b.kind] || BOSS_ATK.orc; return { T: A.T, base: A.base + LV.L * 0.05, pct: A.pct }; }
 // fixed boss HP: world base x level growth, independent of the army and its weapon
@@ -1200,6 +1205,11 @@ function trapGeo() {
   ]);
   TRAPG = { frame: mergeGeometries(frame), arm: mergeGeometries(arm), cones: mergeGeometries(cones), tileFrame: mergeGeometries(tileFrame),
     plate: new THREE.BoxGeometry(SPIKE_W, 0.07, 2.0).translate(0, 0.035, 0), barrel, snow, rock, log };
+  TRAPG.drum = mergeGeometries([ // factory: rolling metal drum, purple shell with hazard bands
+    F(new THREE.CylinderGeometry(ROLL_R, ROLL_R, 1.4, 14).rotateZ(Math.PI / 2), 0x7a4ac8),
+    ...[-0.45, 0, 0.45].map((x) => F(new THREE.CylinderGeometry(ROLL_R + 0.04, ROLL_R + 0.04, 0.14, 14).rotateZ(Math.PI / 2).translate(x, 0, 0), 0x3c4458)),
+    F(new THREE.CylinderGeometry(ROLL_R + 0.02, ROLL_R + 0.02, 0.16, 14).rotateZ(Math.PI / 2).translate(0.23, 0, 0), 0xffc83a),
+    F(new THREE.CylinderGeometry(ROLL_R - 0.1, ROLL_R - 0.1, 1.46, 8).rotateZ(Math.PI / 2), 0xff7a1a)]);
   TRAPG.coconut = mergeGeometries([F(new THREE.IcosahedronGeometry(0.42, 1), 0x6b4423),
     F(new THREE.IcosahedronGeometry(0.4, 1).translate(0.38, 0.12, 0.1), 0x5a3a1e),
     F(new THREE.ConeGeometry(0.12, 0.3, 5).translate(0.1, 0.5, 0), 0x3f8f2f)]);
@@ -1230,7 +1240,7 @@ function buildTraps(spec, grp, keep, th) {
     });
     LV.spikes.push({ ...ss, tiles });
   }
-  const rgeo = th.key === 'snow' ? TG.snow : th.key === 'lava' ? TG.rock : th.key === 'jungle' ? TG.log : TG.barrel;
+  const rgeo = th.key === 'snow' ? TG.snow : th.key === 'lava' ? TG.rock : th.key === 'jungle' ? TG.log : th.key === 'factory' ? TG.drum : TG.barrel;
   for (const rs of spec.rollers || []) {
     const m = new THREE.Mesh(rgeo, MAT.decor); m.position.set(rs.x, ROLL_R, rs.z); grp.add(m);
     const r = { ...rs, kind: 'roller', w: 1.4, d: 1.4, hp: 1, max: 1, alive: true, armed: false, rolling: false, mesh: m, wob: 0 };

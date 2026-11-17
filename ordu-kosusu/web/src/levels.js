@@ -15,6 +15,8 @@ export const ETYPES = {
   demon: { hp: 2.2, shoots: true, rate: 0.28, bullet: 0xff7a1a, speed: 4 },
   tribal: { hp: 1.6, shoots: false, speed: 5.6 },         // jungle: fast spear runners
   blowgun: { hp: 1.3, shoots: true, rate: 0.26, bullet: 0x7dff6a, speed: 4 },
+  robot: { hp: 2.0, shoots: false, speed: 4.5 },          // factory: sturdy saw-arm robots
+  droid: { hp: 1.4, shoots: true, rate: 0.28, bullet: 0xff3df2, speed: 4 },
 };
 
 // ============================================================ level generation (layout only;
@@ -53,6 +55,7 @@ export const WORLD_FLAVOUR = [
   { shooter: 0.3, f: 1.0, traps: { roller: 1.7, hammer: 0.9, spikes: 0.6, saw: 0.5 } },     // snow: snowballs + tough knights
   { shooter: 0.45, f: 1.0, traps: { roller: 1.1, spikes: 1.1, hammer: 1.1, saw: 1.0 } },   // lava: everything
   { shooter: 0.42, f: 1.0, traps: { coconut: 2.6, mud: 1.6, hammer: 0.6, roller: 0.5, spikes: 0.5, saw: 0.4 } }, // jungle: coconuts + mud
+  { shooter: 0.38, f: 0.88, traps: { saw: 1.5, hammer: 1.2, roller: 1.0, spikes: 0.8 } },    // factory: saws + piston hammers + rolling drums
 ];
 // heat inside each 10-level world: gentle start, mild peak at x4 (x5 is the gold-run bonus level,
 // see bonus.js), breather at x6, showdown at x10

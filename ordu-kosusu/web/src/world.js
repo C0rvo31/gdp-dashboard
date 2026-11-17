@@ -76,6 +76,20 @@ export const THEMES = [
     skyline: { far: 0x3f7a62, near: 0x2c6a3c, cap: null, farShape: 'hills', nearShape: 'hills' },
     fence: 'bambooFence', weather: 'fireflies', melee: 'tribal', shooter: 'blowgun', boss: 'gorilla',
   },
+  {
+    key: 'factory', name: 'FABRİKA', skyTop: 0x1c2250, skyBot: 0x7a64b4, fog: 0x544f86, fogNear: 36, fogFar: 108,
+    hemi: [0xc4d2ff, 0x2c2a4a, 2.2], sun: [0xdfe6ff, 2.0], cloud: [0x6a6288, 0x241f3a],
+    ground: ['#2e3342', '#282c3a', 'rgba(130,160,220,.10)', 'rgba(0,0,0,.2)'], band: 0x1f2330,
+    road: ['#4c5266', '#ffc83a', 'rgba(90,235,255,.9)'], curb: ['#ffc83a', '#23262e'],
+    wall: ['#262a38', ['#5a6078', '#4e546c', '#666c86']], cap: 0x8a90aa,
+    near: [['crateStack', 0.22], ['drum', 0.2], ['pipeRun', 0.16], ['scrapGear', 0.12], ['panelBox', 0.16], ['drum2', 0.14]],
+    far: [['conveyor', 0.18], ['crane', 0.1], ['holoSign', 0.14], ['drone', 0.1], ['pipeTower', 0.1], ['crateStack', 0.1], ['tank', 0.12], ['panelBox', 0.08], ['drum', 0.08]],
+    big: [['factoryTower', 0.27], ['reactor', 0.2], ['gearWall', 0.2], ['smokestack', 0.33]],
+    tiny: [['scrap', 0.6], ['floorLight', 0.4]],
+    river: { sides: [-1], base: 14, amp: 3, w: 2.4, bank: 0x14161e, water: 0x2a7aff, core: 0x7ff6ff, glow: true },
+    skyline: { far: 0x3a3d7a, near: 0x262a52, cap: 0x8a86d8, farShape: 'towers', nearShape: 'towers' },
+    fence: 'railFence', weather: 'sparks', melee: 'robot', shooter: 'droid', boss: 'mech',
+  },
 ];
 export const themeIndex = (L) => Math.floor((L - 1) / 10) % THEMES.length;
 export const themeFor = (L) => THEMES[themeIndex(L)];
@@ -92,6 +106,17 @@ export function themeTextures(th, maxAniso) {
   speckle(x, 256, 256, 900, 'rgba(255,255,255,.05)', 'rgba(0,0,0,.06)');
   x.fillStyle = th.road[1]; x.fillRect(8, 0, 9, 256); x.fillRect(239, 0, 9, 256);
   x.fillStyle = th.road[2]; x.fillRect(84, 20, 6, 96); x.fillRect(166, 20, 6, 96); x.fillRect(84, 148, 6, 96); x.fillRect(166, 148, 6, 96);
+  if (th.key === 'factory') {
+    // metal plates: seams, rivets, hazard-striped edges, glowing lane lines
+    x.fillStyle = 'rgba(255,255,255,.035)'; for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) if ((a + b) % 2) x.fillRect(a * 64, b * 64, 64, 64);
+    x.fillStyle = 'rgba(0,0,0,.35)'; for (let k = 0; k < 4; k++) { x.fillRect(k * 64, 0, 2, 256); x.fillRect(0, k * 64, 256, 2); }
+    x.fillStyle = 'rgba(255,255,255,.28)'; for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) for (const [ox, oy] of [[8, 8], [54, 8], [8, 54], [54, 54]]) x.fillRect(a * 64 + ox, b * 64 + oy, 3, 3);
+    for (const ex of [8, 239]) {
+      x.fillStyle = '#23262e'; x.fillRect(ex, 0, 9, 256);
+      x.fillStyle = '#ffc83a'; for (let y = -16; y < 256; y += 16) { x.beginPath(); x.moveTo(ex, y + 16); x.lineTo(ex + 9, y); x.lineTo(ex + 9, y + 8); x.lineTo(ex, y + 24); x.closePath(); x.fill(); }
+    }
+    x.fillStyle = 'rgba(90,235,255,.22)'; for (const lx of [84, 166]) { x.fillRect(lx - 4, 20, 14, 96); x.fillRect(lx - 4, 148, 14, 96); }
+  }
   if (th.key === 'lava') { x.strokeStyle = 'rgba(255,110,30,.35)'; x.lineWidth = 2; for (let i = 0; i < 6; i++) { x.beginPath(); let px = 30 + Math.random() * 200, py = Math.random() * 256; x.moveTo(px, py); for (let k = 0; k < 4; k++) { px += (Math.random() - 0.5) * 30; py += Math.random() * 25; x.lineTo(px, py); } x.stroke(); } }
   if (th.key === 'jungle') {
     for (let i = 0; i < 70; i++) { x.fillStyle = Math.random() < 0.5 ? 'rgba(90,70,45,.22)' : 'rgba(255,240,210,.12)'; x.beginPath(); x.ellipse(20 + Math.random() * 216, Math.random() * 256, 6 + Math.random() * 8, 4 + Math.random() * 5, Math.random() * 3, 0, Math.PI * 2); x.fill(); }
@@ -102,6 +127,7 @@ export function themeTextures(th, maxAniso) {
   c = makeCanvas(64, 64); x = c.getContext('2d');
   x.fillStyle = th.ground[0]; x.fillRect(0, 0, 64, 32); x.fillStyle = th.ground[1]; x.fillRect(0, 32, 64, 32);
   for (let i = 0; i < 260; i++) { x.fillStyle = Math.random() < 0.5 ? th.ground[2] : th.ground[3]; x.fillRect(Math.random() * 64, Math.random() * 64, 2, 3); }
+  if (th.key === 'factory') { x.fillStyle = 'rgba(0,0,0,.4)'; x.fillRect(0, 0, 64, 1); x.fillRect(0, 32, 64, 1); x.fillRect(0, 0, 1, 64); x.fillRect(32, 0, 1, 64); x.fillStyle = 'rgba(160,190,255,.18)'; x.fillRect(1, 1, 31, 1); x.fillRect(33, 33, 31, 1); x.fillStyle = 'rgba(255,200,60,.35)'; x.fillRect(4, 4, 2, 2); x.fillRect(36, 36, 2, 2); }
   if (th.key === 'lava') { x.fillStyle = 'rgba(255,110,30,.5)'; for (let i = 0; i < 5; i++) x.fillRect(Math.random() * 64, Math.random() * 64, 3, 1); }
   T.ground = canvasTex(c); T.ground.wrapS = T.ground.wrapT = THREE.RepeatWrapping;
 
@@ -118,6 +144,7 @@ export function themeTextures(th, maxAniso) {
   }
   if (th.key === 'lava') { x.strokeStyle = '#ff7a1a'; x.lineWidth = 2; for (let i = 0; i < 4; i++) { x.beginPath(); x.moveTo(Math.random() * 128, 0); x.lineTo(Math.random() * 128, 64); x.lineTo(Math.random() * 128, 128); x.stroke(); } }
   if (th.key === 'jungle') { x.fillStyle = 'rgba(80,160,50,.6)'; for (let i = 0; i < 10; i++) { const px = Math.random() * 124; x.fillRect(px, 0, 5, 6 + Math.random() * 22); x.fillRect(px - 3, 0, 11, 4); } }
+  if (th.key === 'factory') { x.fillStyle = 'rgba(111,247,255,.75)'; for (let i = 0; i < 5; i++) x.fillRect(8 + Math.random() * 100, 12 + Math.floor(Math.random() * 4) * 32, 22, 3); x.fillStyle = 'rgba(255,255,255,.22)'; for (let r = 0; r < 4; r++) for (let k = 0; k < 2; k++) { x.fillRect(8 + k * 64, r * 32 + 7, 3, 3); x.fillRect(53 + k * 64, r * 32 + 24, 3, 3); } }
   if (th.key === 'snow') { x.fillStyle = 'rgba(255,255,255,.5)'; for (let i = 0; i < 8; i++) x.fillRect(Math.random() * 120, Math.random() * 120, 10, 2); }
   T.wall = canvasTex(c); T.wall.wrapS = T.wall.wrapT = THREE.RepeatWrapping;
 
@@ -133,6 +160,11 @@ export function themeTextures(th, maxAniso) {
     x.fillStyle = 'rgba(30,70,20,.35)'; x.fillRect(0, 0, 6, 128);
     for (let i = 0; i < 160; i++) { x.fillStyle = ['rgba(120,90,40,.35)', 'rgba(20,80,20,.35)', 'rgba(150,220,90,.25)'][i % 3]; x.beginPath(); x.ellipse(Math.random() * 64, Math.random() * 128, 2 + Math.random() * 2.5, 1, Math.random() * 3, 0, Math.PI * 2); x.fill(); }
     for (let i = 0; i < 8; i++) { x.fillStyle = ['#ff5a3a', '#ffd23a', '#ff7eb6'][i % 3]; x.fillRect(8 + Math.random() * 54, Math.random() * 126, 2, 2); }
+  } else if (th.key === 'factory') {
+    x.fillStyle = 'rgba(0,0,0,.35)'; x.fillRect(0, 0, 64, 2); x.fillRect(0, 62, 64, 2); x.fillRect(0, 126, 64, 2); x.fillRect(31, 0, 2, 128);
+    speckle(x, 64, 128, 200, 'rgba(160,190,255,.14)', 'rgba(0,0,0,.2)');
+    x.fillStyle = 'rgba(255,255,255,.22)'; for (const [a, b] of [[6, 6], [56, 6], [6, 56], [56, 56], [6, 70], [56, 70], [6, 120], [56, 120]]) x.fillRect(a, b, 2, 2);
+    x.fillStyle = 'rgba(90,235,255,.8)'; x.fillRect(0, 0, 3, 128);
   } else if (th.key === 'desert') {
     x.strokeStyle = 'rgba(160,110,40,.22)'; x.lineWidth = 2;
     for (let k = 0; k < 12; k++) { x.beginPath(); for (let u = 0; u <= 64; u += 4) x.lineTo(u, k * 11 + Math.sin(u * 0.15 + k) * 3); x.stroke(); }
@@ -591,6 +623,106 @@ export function buildDecor() {
   }
   D.bambooFence = fence(0x9ac25a, 0x86b04a);
 
+  // factory (robot plant): steel, hazard yellow, orange crates, purple drums, cyan / magenta neon
+  {
+    const steel = 0x5a6078, steelD = 0x3c4458, steelL = 0x8a90a8, hazY = 0xffc83a, hazD = 0x23262e, cyan = 0x6ff7ff, mag = 0xff3df2, orng = 0xff7a1a, purp = 0x7a4ac8;
+    const bx = (w, h, d, x, y, z, hex, ry = 0) => F(new THREE.BoxGeometry(w, h, d).rotateY(ry).translate(x, y, z), hex);
+    const cy = (rt, rb, h, x, y, z, hex, seg = 10) => F(new THREE.CylinderGeometry(rt, rb, h, seg).translate(x, y, z), hex);
+    const crate = (x, y, z, s, hex, ry = 0) => [
+      F(new THREE.BoxGeometry(s, s, s).rotateY(ry).translate(x, y + s / 2, z), hex),
+      F(new THREE.BoxGeometry(s + 0.05, s * 0.13, s + 0.05).rotateY(ry).translate(x, y + s * 0.07, z), hazD),
+      F(new THREE.BoxGeometry(s + 0.05, s * 0.13, s + 0.05).rotateY(ry).translate(x, y + s * 0.93, z), hazD),
+      F(new THREE.BoxGeometry(s * 0.2, s * 0.2, 0.04).rotateY(ry).translate(x + Math.sin(ry) * (s / 2 + 0.01), y + s * 0.55, z + Math.cos(ry) * (s / 2 + 0.01)), hazY)];
+    D.crateStack = M([...crate(-0.5, 0, 0, 0.95, 0xd9792a), ...crate(0.55, 0, 0.1, 0.9, 0x6a7088, 0.1), ...crate(-0.05, 0.95, 0.05, 0.8, 0x9a62d8, 0.35)]);
+    const drum = (x, z, hex, h = 0.95) => [cy(0.36, 0.36, h, x, h / 2, z, hex, 10), cy(0.375, 0.375, 0.07, x, h * 0.3, z, hazD, 10), cy(0.375, 0.375, 0.07, x, h * 0.72, z, hazD, 10),
+      bx(0.2, 0.22, 0.03, x, h * 0.52, z + 0.37, hazY), cy(0.3, 0.3, 0.04, x, h + 0.02, z, steelL, 10)];
+    D.drum = M([...drum(0, 0, purp), ...drum(0.8, 0.2, 0xd9792a, 0.85), ...drum(0.3, -0.7, purp, 0.95)]);
+    D.drum2 = M([...drum(0, 0, 0x6a7088), ...drum(0.75, -0.2, purp, 0.9)]);
+    D.pipeRun = M([
+      F(new THREE.CylinderGeometry(0.17, 0.17, 2.4, 8).rotateX(Math.PI / 2).translate(0, 0.55, 0), 0x7a8098),
+      F(new THREE.CylinderGeometry(0.13, 0.13, 2.4, 8).rotateX(Math.PI / 2).translate(0.32, 0.95, 0), orng),
+      ...[-0.9, 0, 0.9].map((z) => F(new THREE.CylinderGeometry(0.22, 0.22, 0.1, 8).rotateX(Math.PI / 2).translate(0, 0.55, z), steelD)),
+      ...[-0.9, 0.9].map((z) => bx(0.1, 0.55, 0.12, 0, 0.27, z, steelD)), ...[-0.9, 0.9].map((z) => bx(0.5, 0.08, 0.2, 0, 0.04, z, steelD)),
+      F(new THREE.SphereGeometry(0.2, 8, 5).translate(0, 0.55, 1.2), 0x7a8098)]);
+    // cog standing upright (axis z), centred at the origin
+    const gear = (r, teeth, th, col, hub, spokes = 5) => {
+      const p = [F(new THREE.LatheGeometry([[r * 0.78, -th / 2], [r, -th / 2], [r, th / 2], [r * 0.78, th / 2], [r * 0.78, -th / 2]].map(([a, b]) => new THREE.Vector2(a, b)), 14).rotateX(Math.PI / 2), col),
+        F(new THREE.CylinderGeometry(r * 0.2, r * 0.2, th * 1.5, 8).rotateX(Math.PI / 2), hub)];
+      for (let i = 0; i < teeth; i++) { const a = (i / teeth) * Math.PI * 2; p.push(F(new THREE.BoxGeometry(r * 0.2, r * 0.24, th).rotateZ(a).translate(Math.cos(a) * r * 1.02, Math.sin(a) * r * 1.02, 0), col)); }
+      for (let i = 0; i < spokes; i++) { const a = (i / spokes) * Math.PI; p.push(F(new THREE.BoxGeometry(r * 1.6, r * 0.14, th * 0.7).rotateZ(a), col)); }
+      return p;
+    };
+    D.scrapGear = M([...gear(0.5, 9, 0.16, 0x6a7088, orng, 4).map((g) => g.rotateX(-0.9).translate(0, 0.42, 0)), ...gear(0.3, 7, 0.14, 0x9a62d8, hazY, 3).map((g) => g.rotateX(-1.2).translate(0.65, 0.22, 0.35)),
+      bx(0.3, 0.1, 0.2, -0.5, 0.05, 0.4, steelD, 0.5)]);
+    D.panelBox = withGlow(M([bx(0.9, 1.4, 0.5, 0, 0.7, 0, steelD), bx(0.96, 0.1, 0.56, 0, 1.43, 0, steel), bx(0.7, 0.55, 0.04, 0, 0.95, 0.27, 0x14161e), cy(0.04, 0.04, 0.5, 0.2, 0.35, 0.27, hazY, 6)]),
+      [bx(0.6, 0.4, 0.03, 0, 0.97, 0.285, 0x3ad8f0), bx(0.4, 0.05, 0.035, -0.05, 1.03, 0.3, 0xe6ffff), bx(0.28, 0.05, 0.035, -0.11, 0.93, 0.3, 0xe6ffff),
+        F(new THREE.BoxGeometry(0.07, 0.07, 0.03).translate(-0.28, 0.5, 0.27), 0xff4a3a), F(new THREE.BoxGeometry(0.07, 0.07, 0.03).translate(-0.12, 0.5, 0.27), 0x5aff7a)]);
+    D.conveyor = withGlow(M([
+      bx(1.1, 0.22, 4.4, 0, 0.78, 0, 0x23262e), bx(1.0, 0.06, 4.3, 0, 0.92, 0, 0x30343f),
+      ...[-1.9, -0.65, 0.65, 1.9].map((z) => bx(0.12, 0.8, 0.12, -0.46, 0.4, z, steelD)), ...[-1.9, -0.65, 0.65, 1.9].map((z) => bx(0.12, 0.8, 0.12, 0.46, 0.4, z, steelD)),
+      F(new THREE.CylinderGeometry(0.2, 0.2, 1.1, 8).rotateZ(Math.PI / 2).translate(0, 0.9, 2.2), steel), F(new THREE.CylinderGeometry(0.2, 0.2, 1.1, 8).rotateZ(Math.PI / 2).translate(0, 0.9, -2.2), steel),
+      ...crate(0, 0.95, 0.9, 0.55, 0xd9792a, 0.2), ...crate(0.02, 0.95, -0.9, 0.45, 0x9a62d8, 0.5),
+      bx(0.06, 0.5, 0.06, 0.55, 1.2, 1.9, hazD), bx(0.4, 0.06, 0.06, 0.55, 1.45, 1.8, hazD)]),
+    [bx(0.04, 0.05, 4.3, -0.57, 0.8, 0, orng), bx(0.04, 0.05, 4.3, 0.57, 0.8, 0, orng), F(new THREE.SphereGeometry(0.06, 5, 4).translate(0.55, 1.5, 1.62), 0xff3a3a)]);
+    D.crane = withGlow(M([
+      bx(1.6, 0.3, 1.6, 0, 0.15, 0, steelD), bx(0.5, 6.0, 0.5, 0, 3.2, 0, 0x7a8098),
+      ...[0.9, 1.9, 2.9, 3.9, 4.9].map((y, i) => bx(0.56, 0.25, 0.56, 0, y, 0, i % 2 ? hazD : hazY)),
+      bx(0.7, 0.5, 0.7, 0, 6.3, 0, steelD), bx(5.2, 0.3, 0.4, 1.0, 6.7, 0, 0x7a8098), bx(1.4, 0.7, 0.7, -1.9, 6.5, 0, 0x6a7088),
+      ...[0.2, 1.3, 2.4, 3.3].map((x, i) => bx(0.26, 0.26, 0.44, x, 6.7, 0, i % 2 ? hazD : hazY)),
+      cy(0.025, 0.025, 3.4, 2.8, 4.9, 0, 0x2a2e36, 4), bx(0.4, 0.3, 0.4, 2.8, 3.15, 0, steelD), bx(0.1, 0.3, 0.45, 2.8, 2.95, 0, hazY)]),
+    [F(new THREE.IcosahedronGeometry(0.1, 0).translate(3.55, 6.9, 0), 0xff3a3a), F(new THREE.BoxGeometry(0.4, 0.05, 0.42).translate(0, 5.3, 0), cyan)]);
+    D.holoSign = withGlow(M([bx(0.14, 2.4, 0.14, 0, 1.2, 0, steelD), bx(0.5, 0.12, 0.4, 0, 0.06, 0, steelD), bx(1.9, 1.0, 0.05, 0, 2.7, 0, 0x14182a)]),
+      [bx(2.0, 0.07, 0.07, 0, 3.2, 0, mag), bx(2.0, 0.07, 0.07, 0, 2.2, 0, mag), bx(0.07, 1.07, 0.07, -1.0, 2.7, 0, mag), bx(0.07, 1.07, 0.07, 1.0, 2.7, 0, mag),
+        bx(1.3, 0.12, 0.08, -0.2, 2.95, 0, cyan), bx(0.9, 0.12, 0.08, -0.4, 2.7, 0, cyan), bx(1.5, 0.12, 0.08, -0.1, 2.45, 0, cyan), F(new THREE.IcosahedronGeometry(0.1, 0).translate(0.7, 2.7, 0), hazY)]);
+    D.drone = withGlow(M([F(new THREE.IcosahedronGeometry(0.34, 1).scale(1.2, 0.7, 1.2).translate(0, 2.4, 0), 0x5a4a88), bx(0.5, 0.1, 0.5, 0, 2.7, 0, steelD),
+      ...[[1, 1], [-1, 1], [1, -1], [-1, -1]].flatMap(([a, b]) => [bx(0.5, 0.05, 0.05, a * 0.42, 2.55, b * 0.42, steelD, a * b * 0.785), F(new THREE.TorusGeometry(0.26, 0.03, 4, 12).rotateX(Math.PI / 2).translate(a * 0.62, 2.62, b * 0.62), steelL)]),
+      cy(0.015, 0.015, 0.4, 0, 3.0, 0, steelL, 4)]),
+    [F(new THREE.IcosahedronGeometry(0.1, 0).translate(0, 2.28, 0.28), cyan), F(new THREE.IcosahedronGeometry(0.05, 0).translate(0, 3.22, 0), 0xff3a3a)]);
+    D.tank = withGlow(M([cy(1.0, 1.0, 2.6, 0, 1.3, 0, 0x7a8098, 12), F(new THREE.SphereGeometry(1.0, 12, 5, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.4, 1).translate(0, 2.6, 0), 0x8a90a8),
+      ...[0.5, 1.3, 2.1].map((y) => cy(1.04, 1.04, 0.1, 0, y, 0, steelD, 12)), bx(0.12, 2.4, 0.5, 1.0, 1.3, 0, steelD), cy(0.18, 0.18, 0.6, 0, 3.0, 0, steelD, 8),
+      bx(0.5, 0.5, 0.06, 0, 0.9, 1.0, hazY)]),
+    [bx(0.1, 1.7, 0.05, -0.55, 1.4, 0.98, cyan)]);
+    D.pipeTower = M([cy(0.3, 0.3, 4.6, 0, 2.3, 0, 0x7a8098, 8), cy(0.22, 0.22, 3.6, 0.55, 1.9, 0.1, orng, 8), cy(0.18, 0.18, 4.2, -0.45, 2.1, 0.2, purp, 8),
+      ...[0.8, 2.0, 3.2, 4.3].map((y) => cy(0.36, 0.36, 0.12, 0, y, 0, steelD, 8)),
+      F(new THREE.CylinderGeometry(0.22, 0.22, 1.4, 8).rotateZ(Math.PI / 2).translate(0.45, 4.7, 0), orng), F(new THREE.SphereGeometry(0.26, 8, 6).translate(0, 4.75, 0), 0x7a8098),
+      bx(1.4, 0.2, 1.0, 0, 0.1, 0.1, steelD), bx(0.4, 0.4, 0.4, 0.9, 0.2, 0.3, hazY, 0.4)]);
+    D.railFence = mergeGeometries([
+      F(new THREE.BoxGeometry(0.14, 0.78, 0.14).translate(0, 0.39, 0), steelD), F(new THREE.BoxGeometry(0.18, 0.1, 0.18).translate(0, 0.82, 0), steelL),
+      F(new THREE.BoxGeometry(0.06, 0.12, 2.0).translate(0, 0.62, 1.0), hazY), F(new THREE.BoxGeometry(0.06, 0.1, 2.0).translate(0, 0.32, 1.0), steel),
+      ...[0.35, 0.95, 1.55].map((z) => F(new THREE.BoxGeometry(0.075, 0.12, 0.2).translate(0, 0.62, z), hazD))]);
+    // big landmarks
+    {
+      const p = [bx(5.2, 3.2, 4.4, 0, 1.6, 0, 0x4a5068), bx(4.2, 2.8, 3.6, 0.2, 4.6, 0, 0x565c76), bx(5.4, 0.3, 4.6, 0, 3.25, 0, steelD), bx(4.4, 0.3, 3.8, 0.2, 6.15, 0, steelD),
+        cy(0.9, 0.9, 1.4, -1.4, 6.9, 0.3, 0x7a8098, 10), cy(0.95, 0.95, 0.15, -1.4, 7.6, 0.3, steelD, 10), bx(1.2, 0.7, 1.2, 1.2, 6.55, -0.4, hazY),
+        cy(0.05, 0.05, 2.4, 1.6, 7.6, 0.4, steelL, 4), bx(0.3, 0.9, 0.4, 3.0, 0.45, 0.6, hazD)];
+      const gl = [F(new THREE.IcosahedronGeometry(0.12, 0).translate(1.6, 8.8, 0.4), 0xff3a3a), bx(1.6, 0.4, 0.05, 0.2, 2.5, 2.23, mag)];
+      for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+        if ((r * 5 + c * 3) % 4 === 1) continue;
+        gl.push(bx(0.5, 0.36, 0.05, -1.7 + c * 1.15, 0.55 + r * 0.62, 2.23, (r + c) % 3 ? 0xffd86a : cyan));
+      }
+      for (let c = 0; c < 3; c++) gl.push(bx(0.55, 0.5, 0.05, -0.9 + c * 1.2, 4.6, 1.83, c % 2 ? 0xffd86a : cyan));
+      D.factoryTower = withGlow(M(p), gl);
+    }
+    D.reactor = withGlow(M([cy(3.1, 3.4, 1.0, 0, 0.5, 0, steelD, 12), cy(3.0, 3.0, 0.2, 0, 1.1, 0, hazY, 12),
+      ...[1.7, 2.7].map((y, i) => F(new THREE.TorusGeometry(2.4 - i * 0.65 + 0.1, 0.12, 5, 16).rotateX(Math.PI / 2).translate(0, y, 0), steel)),
+      cy(0.5, 0.7, 0.5, 0, 4.4, 0, steelD, 8), cy(0.9, 0.9, 0.3, 0, 1.3, 0, hazD, 12),
+      ...[0, 2.1, 4.2].map((a) => F(new THREE.CylinderGeometry(0.2, 0.2, 3.0, 6).rotateZ(Math.PI / 2).translate(1.5, 0.9, 0).rotateY(a).translate(0, 0, 0), 0x7a8098))]),
+    [F(new THREE.SphereGeometry(2.3, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1.05, 1).translate(0, 1.2, 0), 0x38b8ff),
+      F(new THREE.SphereGeometry(1.2, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 3.4, 0), 0xb8f4ff), F(new THREE.TorusGeometry(2.0, 0.07, 4, 20).rotateX(Math.PI / 2).translate(0, 2.2, 0), 0xe6ffff),
+      F(new THREE.TorusGeometry(2.3, 0.06, 4, 20).rotateX(Math.PI / 2).translate(0, 1.25, 0), mag)]);
+    D.gearWall = M([...gear(3.2, 14, 0.7, steel, hazY, 6).map((g) => g.translate(-1.1, 2.6, 0)), ...gear(2.0, 10, 0.7, 0xd9792a, hazD, 5).map((g) => g.rotateZ(0.2).translate(3.0, 1.55, 0)),
+      bx(0.5, 3.0, 0.5, -1.1, 1.5, -0.7, steelD), bx(0.5, 2.4, 0.5, 3.0, 1.2, -0.7, steelD), bx(8, 0.4, 1.6, 0.9, 0.2, -0.2, steelD)]);
+    {
+      const p = [cy(1.1, 0.9, 11, 0, 5.5, 0, 0x8a90a8, 12), bx(3.4, 1.8, 3.0, 0, 0.9, 0.2, steel), cy(1.0, 1.0, 0.25, 0, 11.1, 0, steelD, 12), bx(0.9, 1.5, 0.9, 2.2, 0.75, 0.8, hazY)];
+      [1.5, 3.5, 5.5, 7.5, 9.5].forEach((y, i) => p.push(cy(1.08 - y * 0.017 + 0.03, 1.08 - y * 0.017 + 0.03, 0.9, 0, y + 0.5, 0, i % 2 ? 0x2a2e3a : hazY, 12)));
+      for (const [x, y, z, r, c] of [[0, 11.9, 0, 0.8, 0x54566a], [0.7, 12.9, 0.2, 1.1, 0x62647a], [1.5, 14.2, 0.1, 1.4, 0x6e7086], [2.6, 15.6, -0.1, 1.7, 0x7a7c92], [3.9, 17.1, 0, 2.0, 0x86889e]])
+        p.push(F(new THREE.IcosahedronGeometry(r, 0).translate(x, y, z), c));
+      D.smokestack = withGlow(M(p), [F(new THREE.IcosahedronGeometry(0.14, 0).translate(0, 11.45, 0), 0xff3a3a), bx(0.5, 0.3, 0.05, 0, 1.3, 1.73, orng)]);
+    }
+    D.scrap = M([bx(0.22, 0.05, 0.14, 0, 0.025, 0, 0x6a7088, 0.4), F(new THREE.CylinderGeometry(0.08, 0.08, 0.05, 6).translate(0.25, 0.025, 0.08), hazY), bx(0.1, 0.08, 0.3, -0.2, 0.04, 0.2, steelD, 0.9)]);
+    D.floorLight = glow(M([bx(0.5, 0.03, 0.5, 0, 0.015, 0, cyan), bx(0.22, 0.04, 0.22, 0.7, 0.02, 0.2, orng)]));
+  }
+
   D.cloud = mergeGeometries([
     plain(new THREE.IcosahedronGeometry(2.2, 1)),
     plain(new THREE.IcosahedronGeometry(1.7, 1).translate(2.4, -0.3, 0.2)),
@@ -673,17 +805,18 @@ function skylineGeo(th) {
   const fog = new THREE.Color(th.fog);
   const pos = [], col = [];
   const layer = (radius, shape, hex, haze, hMin, hMax, nPeaks) => {
-    const N = 120, base = new THREE.Color(hex).lerp(fog, haze), mid = base.clone().lerp(fog, 0.35);
+    const N = shape === 'towers' ? 480 : 120, base = new THREE.Color(hex).lerp(fog, haze), mid = base.clone().lerp(fog, 0.35);
     const capC = S.cap != null ? new THREE.Color(S.cap).lerp(fog, shape === 'volcano' ? 0.05 : haze * 0.6) : base;
     const peaks = [];
-    const mesa = shape === 'mesa', n = mesa ? 12 : nPeaks;
-    for (let i = 0; i < n; i++) peaks.push({ a: rnd() * Math.PI * 2, h: (hMin + rnd() * (hMax - hMin)) * (mesa ? 0.6 : 1), w: mesa ? 0.025 + rnd() * 0.06 : 0.08 + rnd() * 0.16, top: rnd() });
+    const mesa = shape === 'mesa', tow = shape === 'towers', n = mesa ? 12 : tow ? nPeaks * 2 : nPeaks;
+    for (let i = 0; i < n; i++) peaks.push({ a: rnd() * Math.PI * 2, h: (hMin + rnd() * (hMax - hMin)) * (mesa ? 0.6 : 1), w: mesa ? 0.025 + rnd() * 0.06 : tow ? 0.025 + rnd() * 0.045 : 0.08 + rnd() * 0.16, top: rnd() });
     const hAt = (t) => {
       let h = hMin * 0.35;
       for (const p of peaks) {
         let d = Math.abs(t - p.a); if (d > Math.PI) d = Math.PI * 2 - d;
         let v;
         if (shape === 'mesa') v = p.h * Math.min(1, Math.max(0, (p.w - d) / 0.03));
+        else if (shape === 'towers') v = d < p.w ? p.h * (d < p.w * 0.5 ? 1 : 0.8) * (p.top > 0.8 && d < p.w * 0.35 ? 1.15 : 1) : 0;
         else if (shape === 'dunes' || shape === 'hills') v = p.h * Math.pow(Math.max(0, Math.cos(Math.min(1, d / (p.w * 1.6)) * Math.PI / 2)), 1.5);
         else { v = p.h * Math.max(0, 1 - d / p.w); if (shape === 'volcano' && p.top > 0.5) v = Math.min(v, p.h * 0.82); }
         if (v > h) h = v;
