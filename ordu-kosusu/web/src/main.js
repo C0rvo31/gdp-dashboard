@@ -4,7 +4,7 @@ import { clamp, lerp, ease, mulberry32, makeCanvas, roundRect, canvasTex, setMax
 import { addRim, buildSoldier, buildLeg, SOLDIER_LEGS, buildGun, buildEnemy, buildEnemyLeg, tint, plain, buildSoldierLOD, buildEnemyLOD } from './models.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { THEMES, themeFor, themeIndex, themeTextures, buildDecor, riverPaths, riverBlocked, buildRivers, skylineMesh } from './world.js';
-import { PMAT, gateFrame, wallDeco, crateTrim, coinGeo, sawTrack, finishProps, arenaProps } from './props.js';
+import { PMAT, gateFrame, wallDeco, crateTrim, coinGeo, sawTrack, finishProps, arenaProps, crateIcon, propsTick } from './props.js';
 import { ETYPES, nice, niceHp, applyOp, opText, isGood, makeOp, genLevel } from './levels.js';
 import { buildBoss } from './boss.js';
 // BONUS: victory stairs finale + ALTIN KOŞUSU gold-run levels
@@ -345,9 +345,9 @@ function clearBullets() { B.top = 0; B.life.fill(0); EB.top = 0; EB.life.fill(0)
 const dirtyLabels = new Set();
 function flushLabels() { for (const l of dirtyLabels) l.paint(); dirtyLabels.clear(); }
 class CountLabel {
-  constructor(color, dark) {
+  constructor(color, dark, icon = 'soldier') {
     this.c = makeCanvas(256, 128); this.ctx = this.c.getContext('2d');
-    this.color = color; this.dark = dark; this.val = -1;
+    this.color = color; this.dark = dark; this.icon = icon; this.val = -1;
     this.tex = canvasTex(this.c);
     this.sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tex, depthTest: false, transparent: true, fog: false }));
     this.sprite.scale.set(1.5, 0.75, 1);
@@ -360,19 +360,50 @@ class CountLabel {
     this.val = v;
     dirtyLabels.add(this);
   }
+  // position + grow with camera distance so far-away enemy counts stay readable
+  place(x, y, z) {
+    const sp = this.sprite;
+    sp.position.set(x, y, z);
+    const k = clamp(sp.position.distanceTo(camera.position) / 16, 1, 2.1);
+    sp.scale.set(1.5 * k, 0.75 * k, 1);
+  }
   paint() {
     const x = this.ctx, t = fmt(this.val);
     x.clearRect(0, 0, 256, 128);
-    x.font = `900 76px ${FONT}`;
-    const w = Math.min(244, Math.max(120, x.measureText(t).width + 60));
-    x.fillStyle = this.dark; roundRect(x, 128 - w / 2, 18, w, 96, 30); x.fill();
-    x.fillStyle = this.color; roundRect(x, 128 - w / 2, 10, w, 96, 30); x.fill();
-    strokeText(x, t, 128, 62, 76, '#ffffff', 'rgba(0,0,0,.18)', 6);
+    x.font = `900 66px ${FONT}`;
+    const tw = x.measureText(t).width, w = Math.min(248, Math.max(130, tw + 100)), x0 = 128 - w / 2, y0 = 12, h = 96;
+    x.fillStyle = 'rgba(0,0,0,.28)'; roundRect(x, x0, y0 + 8, w, h, 44); x.fill();
+    x.fillStyle = '#10182b'; roundRect(x, x0, y0, w, h, 44); x.fill();
+    const g = x.createLinearGradient(0, y0, 0, y0 + h);
+    g.addColorStop(0, this.color); g.addColorStop(1, this.dark);
+    x.fillStyle = g; roundRect(x, x0 + 5, y0 + 5, w - 10, h - 10, 39); x.fill();
+    x.fillStyle = 'rgba(255,255,255,.28)'; roundRect(x, x0 + 14, y0 + 9, w - 28, 28, 14); x.fill();
+    x.lineWidth = 4; x.strokeStyle = 'rgba(255,255,255,.9)'; roundRect(x, x0 + 5, y0 + 5, w - 10, h - 10, 39); x.stroke();
+    const ix = x0 + 44, iy = y0 + h / 2;
+    if (this.icon === 'sword') drawSwordIcon(x, ix, iy, 1);
+    else drawSoldierIcon(x, ix, iy + 8, 0.95);
+    strokeText(x, t, x0 + 44 + (w - 44) / 2 + 6, y0 + h / 2 + 3, 66, '#ffffff', 'rgba(10,16,40,.75)', 8);
     this.tex.needsUpdate = true;
   }
   dispose() { dirtyLabels.delete(this); scene.remove(this.sprite); this.tex.dispose(); this.sprite.material.dispose(); }
 }
-const squadLabel = new CountLabel('#2f8cff', '#1b5fd1');
+function drawSwordIcon(x, cx, cy, s) {
+  x.save(); x.translate(cx, cy); x.scale(s, s); x.rotate(Math.PI / 4);
+  x.lineJoin = 'round';
+  x.fillStyle = '#eef3fa'; x.strokeStyle = '#10182b'; x.lineWidth = 5;
+  x.beginPath(); x.moveTo(0, -34); x.lineTo(7, -22); x.lineTo(7, 12); x.lineTo(-7, 12); x.lineTo(-7, -22); x.closePath(); x.stroke(); x.fill();
+  x.fillStyle = '#ffc83a'; roundRect(x, -19, 11, 38, 9, 4); x.stroke(); x.fill();
+  x.fillStyle = '#8a5a33'; roundRect(x, -5, 19, 10, 17, 4); x.stroke(); x.fill();
+  x.restore();
+}
+function drawShieldIcon(x, cx, cy, s, c1, c2) {
+  x.save(); x.translate(cx, cy); x.scale(s, s); x.lineJoin = 'round';
+  x.beginPath(); x.moveTo(0, -30); x.quadraticCurveTo(20, -24, 28, -26); x.quadraticCurveTo(30, 10, 0, 32); x.quadraticCurveTo(-30, 10, -28, -26); x.quadraticCurveTo(-20, -24, 0, -30); x.closePath();
+  x.fillStyle = c1; x.fill(); x.lineWidth = 5; x.strokeStyle = '#10182b'; x.stroke();
+  x.beginPath(); x.moveTo(0, -22); x.quadraticCurveTo(16, -18, 21, -19); x.quadraticCurveTo(22, 6, 0, 24); x.closePath(); x.fillStyle = c2; x.fill();
+  x.restore();
+}
+const squadLabel = new CountLabel('#3d9bff', '#1b5fd1', 'soldier');
 
 function drawGunIcon(x, cx, cy, s, color) {
   x.save(); x.translate(cx, cy); x.scale(s, s); x.fillStyle = color;
@@ -384,9 +415,10 @@ function drawGunIcon(x, cx, cy, s, color) {
 }
 function drawSoldierIcon(x, cx, cy, s) {
   x.save(); x.translate(cx, cy); x.scale(s, s);
-  x.fillStyle = '#f6c39b'; x.beginPath(); x.arc(0, -22, 16, 0, Math.PI * 2); x.fill();
+  x.lineWidth = 5; x.strokeStyle = '#10182b'; x.lineJoin = 'round';
+  x.fillStyle = '#2f8cff'; roundRect(x, -22, -4, 44, 44, 14); x.stroke(); x.fill();
+  x.fillStyle = '#f6c39b'; x.beginPath(); x.arc(0, -22, 16, 0, Math.PI * 2); x.stroke(); x.fill();
   x.fillStyle = '#1b5fd1'; x.beginPath(); x.arc(0, -26, 17, Math.PI, 0); x.fill();
-  x.fillStyle = '#2f8cff'; roundRect(x, -22, -4, 44, 44, 14); x.fill();
   x.restore();
 }
 class BlockLabel {
@@ -406,7 +438,16 @@ class BlockLabel {
     const x = this.ctx, W = this.c.width, H = this.c.height;
     x.clearRect(0, 0, W, H);
     if (b.kind === 'wall') {
-      strokeText(x, fmt(hp), W / 2, H / 2 + 4, 92, '#ffffff', '#3a1408', 16);
+      x.font = `900 80px ${FONT}`;
+      const tw = x.measureText(fmt(hp)).width, w = Math.min(244, tw + 120), x0 = W / 2 - w / 2, y0 = 12, h = 100;
+      x.fillStyle = 'rgba(0,0,0,.3)'; roundRect(x, x0, y0 + 8, w, h, 48); x.fill();
+      x.fillStyle = '#2a1208'; roundRect(x, x0, y0, w, h, 48); x.fill();
+      const g = x.createLinearGradient(0, y0, 0, y0 + h); g.addColorStop(0, '#ff9a4a'); g.addColorStop(1, '#c4400f');
+      x.fillStyle = g; roundRect(x, x0 + 5, y0 + 5, w - 10, h - 10, 43); x.fill();
+      x.fillStyle = 'rgba(255,255,255,.25)'; roundRect(x, x0 + 16, y0 + 9, w - 32, 28, 14); x.fill();
+      x.lineWidth = 4; x.strokeStyle = 'rgba(255,255,255,.9)'; roundRect(x, x0 + 5, y0 + 5, w - 10, h - 10, 43); x.stroke();
+      drawShieldIcon(x, x0 + 46, y0 + h / 2 + 1, 0.95, '#dfe6f2', '#8fa3c4');
+      strokeText(x, fmt(hp), x0 + 46 + (w - 46) / 2 + 8, y0 + h / 2 + 4, 80, '#ffffff', '#3a1408', 10);
     } else {
       x.fillStyle = 'rgba(255,255,255,.92)'; roundRect(x, 14, 14, 228, 228, 30); x.fill();
       if (b.kind === 'weapon') {
@@ -415,12 +456,13 @@ class BlockLabel {
         x.font = `900 26px ${FONT}`; x.fillStyle = '#16233b'; x.textAlign = 'center'; x.fillText(w.name, 128, 128);
         x.font = `900 22px ${FONT}`; x.fillStyle = '#e0561f'; x.fillText(dmgText(w), 128, 156);
       } else {
-        drawSoldierIcon(x, 78, 92, 1.25);
-        strokeText(x, '+' + (b.v || 0), 162, 88, 64, '#2f8cff', '#ffffff', 2);
+        drawSoldierIcon(x, 76, 96, 1.25);
+        strokeText(x, '+' + (b.v || 0), 164, 88, 62, '#2f8cff', '#ffffff', 2);
       }
       x.fillStyle = '#16233b'; roundRect(x, 58, 172, 140, 56, 20); x.fill();
       strokeText(x, fmt(hp), 128, 201, 44, '#ffc83a', '#16233b', 2);
     }
+    if (b.mesh) crateIcon(b);   // floating weapon / soldier above the crate follows the label
     this.tex.needsUpdate = true;
   }
 }
@@ -501,13 +543,33 @@ const camLook = new THREE.Vector3(0, 0, 8);
 // ============================================================ level building
 function gateTexture(op) {
   const c = makeCanvas(512, 256), x = c.getContext('2d'), good = isGood(op);
-  const g = x.createLinearGradient(0, 0, 0, 256);
-  if (good) { g.addColorStop(0, 'rgba(90,180,255,.85)'); g.addColorStop(1, 'rgba(30,120,255,.6)'); }
-  else { g.addColorStop(0, 'rgba(255,110,110,.85)'); g.addColorStop(1, 'rgba(235,40,60,.6)'); }
-  x.fillStyle = g; roundRect(x, 8, 8, 496, 240, 34); x.fill();
-  x.lineWidth = 12; x.strokeStyle = 'rgba(255,255,255,.95)'; roundRect(x, 8, 8, 496, 240, 34); x.stroke();
-  x.fillStyle = 'rgba(255,255,255,.18)'; roundRect(x, 26, 22, 460, 70, 26); x.fill();
-  strokeText(x, opText(op), 256, 136, 150, '#ffffff', good ? '#1b5fd1' : '#a8162c', 14);
+  const P = good ? { hi: '#5af0b0', lo: '#0c9a78', edge: '#0a5a48', glow: '#c8ffe8', txt: '#075a44' }
+                 : { hi: '#ff7a7a', lo: '#c81e3a', edge: '#7a0e22', glow: '#ffd0d0', txt: '#7a0e22' };
+  x.lineJoin = 'round';
+  x.fillStyle = P.edge; roundRect(x, 4, 4, 504, 248, 38); x.fill();
+  const g0 = x.createLinearGradient(0, 4, 0, 252); g0.addColorStop(0, 'rgba(255,255,255,.95)'); g0.addColorStop(1, P.glow);
+  x.fillStyle = g0; roundRect(x, 8, 8, 496, 240, 34); x.fill();
+  const g = x.createLinearGradient(0, 20, 0, 236); g.addColorStop(0, P.hi); g.addColorStop(1, P.lo);
+  x.fillStyle = g; roundRect(x, 20, 20, 472, 216, 26); x.fill();
+  x.save(); roundRect(x, 20, 20, 472, 216, 26); x.clip();
+  x.fillStyle = 'rgba(255,255,255,.3)'; x.beginPath(); x.ellipse(256, -30, 330, 120, 0, 0, Math.PI * 2); x.fill();
+  x.fillStyle = 'rgba(0,0,0,.14)'; x.fillRect(20, 190, 472, 50);
+  x.restore();
+  const bx = 112, by = 130, br = 70;
+  x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.arc(bx, by + 6, br, 0, Math.PI * 2); x.fill();
+  x.fillStyle = '#ffffff'; x.beginPath(); x.arc(bx, by, br, 0, Math.PI * 2); x.fill();
+  x.fillStyle = good ? '#e8fff6' : '#ffe8ea'; x.beginPath(); x.arc(bx, by, br - 8, 0, Math.PI * 2); x.fill();
+  x.strokeStyle = P.txt; x.fillStyle = P.txt; x.lineWidth = 17; x.lineCap = 'round';
+  x.beginPath();
+  const r = 30;
+  if (op.k === 'add') { x.moveTo(bx - r, by); x.lineTo(bx + r, by); x.moveTo(bx, by - r); x.lineTo(bx, by + r); }
+  else if (op.k === 'sub') { x.moveTo(bx - r, by); x.lineTo(bx + r, by); }
+  else if (op.k === 'mul') { x.moveTo(bx - r * 0.8, by - r * 0.8); x.lineTo(bx + r * 0.8, by + r * 0.8); x.moveTo(bx + r * 0.8, by - r * 0.8); x.lineTo(bx - r * 0.8, by + r * 0.8); }
+  else { x.moveTo(bx - r, by); x.lineTo(bx + r, by); }
+  x.stroke();
+  if (op.k === 'div') { x.beginPath(); x.arc(bx, by - 26, 8.5, 0, Math.PI * 2); x.arc(bx, by + 26, 8.5, 0, Math.PI * 2); x.fill(); }
+  strokeText(x, String(op.v), 330, 138, 132, '#ffffff', P.edge, 18);
+  drawSoldierIcon(x, 448, 62, 0.5);
   return canvasTex(c);
 }
 
@@ -669,7 +731,7 @@ function buildLevel(L) {
     const T2 = ETYPES[es.type];
     LV.enemies.push({ type: es.type, T: T2, troop: eTroop(es.type), x: 0, xr: es.xr, z: es.z, f: es.f, count: 0, sold: [], state: 'idle',
       alive: true, armed: false, pool: 0, fightAcc: 0, meleeAcc: 0, shotAcc: 0, hp: T2.hp * spec.hpMul,
-      label: new CountLabel(T2.shoots ? '#ff7a1a' : '#ff4650', T2.shoots ? '#b8500c' : '#b3202c') });
+      label: new CountLabel(T2.shoots ? '#ff8a2a' : '#ff5560', T2.shoots ? '#b8500c' : '#b3202c', 'sword') });
   }
   for (const g of LV.enemies) g.label.sprite.visible = false;
 
@@ -1145,7 +1207,7 @@ function updateObstacles(dt) {
   for (const c of LV.coins) {
     if (c.taken || c.z > squad.z + 0.5 || c.z < back - 0.3) continue;
     if (Math.abs(c.x - squad.x) < d.hw + 0.25) {
-      c.taken = true; S.runCoins++; S.collected++;
+      c.taken = true; c.tp = S.t; S.runCoins++; S.collected++;
       burst(c.x, 0.8, c.z, 0xffc83a, 4, 2.5, 0.5, 10, 4);
       sfx.play('coin');
       updateCoinsHud();
@@ -1574,22 +1636,29 @@ function drawTroops() {
       g.troop.push(s.x, run ? Math.abs(p) * 0.07 : 0.015 + p * 0.015, s.z, Math.PI, run ? p * 0.7 : 0, s.k);
     }
     g.label.sprite.visible = true;
-    g.label.sprite.position.set(g.x, 2.0, g.z);
+    g.label.place(g.x, 2.0, g.z);
   }
   for (const k in ETROOPS) ETROOPS[k].end();
   const d = dims(S.count);
   squadLabel.sprite.visible = S.count > 0;
-  squadLabel.sprite.position.set(squad.x, 2.0, squad.z - Math.min(d.depth, 3) * 0.5);
+  squadLabel.place(squad.x, 2.0, squad.z - Math.min(d.depth, 3) * 0.5);
   if (stairs) stairsLabel(squadLabel); // BONUS: climbers left
 
+  propsTick(LV.blocks, t);
   if (LV.coinMesh) {
     const a = LV.coinMesh.instanceMatrix.array;
     let n = 0;
     const c = Math.cos(t * 4), s = Math.sin(t * 4);
     for (const cn of LV.coins) {
-      if (cn.taken) continue;
       const dz = cn.z - squad.z;
       if (dz < -16 || dz > 80) continue;
+      if (cn.taken) { // collect pop: quick spin-up, grow, then vanish
+        const u = (t - (cn.tp || -9)) / 0.3;
+        if (u >= 1 || u < 0) continue;
+        const a2 = t * 18, k = (1 + u * 0.9) * (1 - u * u);
+        wRy(a, n++ * 16, Math.cos(a2), Math.sin(a2), cn.x, 0.7 + u * 0.8, cn.z, k);
+        continue;
+      }
       wRy(a, n++ * 16, c, s, cn.x, 0.55 + Math.sin(t * 3 + cn.z) * 0.08, cn.z, 1);
     }
     flushInst(LV.coinMesh, n);
