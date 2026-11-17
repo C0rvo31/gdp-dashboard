@@ -52,10 +52,11 @@ export const WORLD_FLAVOUR = [
   { shooter: 0.52, f: 0.92, traps: { spikes: 1.6, saw: 0.8, hammer: 0.6, roller: 0.5 } },   // desert: spike traps, bandit gunfire
   { shooter: 0.3, f: 1.0, traps: { roller: 1.7, hammer: 0.9, spikes: 0.6, saw: 0.5 } },     // snow: snowballs + tough knights
   { shooter: 0.45, f: 1.0, traps: { roller: 1.1, spikes: 1.1, hammer: 1.1, saw: 1.0 } },   // lava: everything
-  { shooter: 0.42, f: 1.0, traps: { coconut: 1.6, mud: 1.1, hammer: 0.6, roller: 0.5, spikes: 0.5, saw: 0.4 } }, // jungle: coconuts + mud
+  { shooter: 0.42, f: 1.0, traps: { coconut: 2.6, mud: 1.6, hammer: 0.6, roller: 0.5, spikes: 0.5, saw: 0.4 } }, // jungle: coconuts + mud
 ];
-// heat inside each 10-level world: gentle start, spike at x5, breather at x6, showdown at x10
-const HEAT = [0, 0, 0.8, 2.2, 3.4, 6.5, 3.6, 5.2, 6.4, 7.4, 9.5];
+// heat inside each 10-level world: gentle start, mild peak at x4 (x5 is the gold-run bonus level,
+// see bonus.js), breather at x6, showdown at x10
+const HEAT = [0, 0, 0.8, 2.2, 4.6, 3.0, 3.6, 5.2, 6.4, 7.4, 9.5];
 // when each mechanic first shows up (global level)
 export const UNLOCK = { saw: 2, hammer: 4, spikes: 8, roller: 13, coconut: 41, mud: 41 };
 
@@ -69,7 +70,7 @@ export function genLevel(L) {
   const local = (L - 1) % 10 + 1, world = Math.floor((L - 1) / 10);
   const W = WORLD_FLAVOUR[Math.min(world, WORLD_FLAVOUR.length - 1)];
   // worlds add a modest offset so the in-world curve (breather at x6, peaks at x5/x10) survives in later worlds
-  const diff = Math.min(HEAT[local] + Math.min(world, 4) * 1.5, 15.5);
+  const diff = Math.min(HEAT[local] + [0, 1.5, 3, 4.5, 5.3][Math.min(world, 4)], 15.5);
   const spec = { th, gates: [], blocks: [], enemies: [], saws: [], coins: [], hammers: [], spikes: [], rollers: [], drops: [], muds: [], patterns: [] };
   const has = (m) => L >= UNLOCK[m];
   const harsh = clamp((diff - 3) / 12, 0, 0.75);   // bad gates bite harder later, but one misread is never fatal on its own
@@ -289,7 +290,7 @@ export function genLevel(L) {
   }
   // finale before the boss: x10 is a showdown, otherwise a gate decides the last fight
   if (local === 10) plan.push('gate:good', 'showdown');
-  else if (local === 5) plan.push('gate', 'ambushEnd');
+  else if (local === 4 && L > 10) plan.push('gate', 'ambushEnd');
   else plan.push('gateFight');
 
   let z = 26, prevK = null;

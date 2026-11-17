@@ -1141,8 +1141,14 @@ function trapGeo() {
   const rock = mergeGeometries([F(new THREE.DodecahedronGeometry(ROLL_R + 0.05), 0x4a3530),
     F(new THREE.IcosahedronGeometry(0.2, 0).translate(0.5, 0.25, 0.3), 0xff7a1a),
     F(new THREE.IcosahedronGeometry(0.18, 0).translate(-0.45, -0.2, 0.42), 0xffc23a)]);
+  const log = mergeGeometries([
+    F(new THREE.CylinderGeometry(ROLL_R, ROLL_R, 1.45, 12).rotateZ(Math.PI / 2), 0x6b4a2f),
+    F(new THREE.CylinderGeometry(ROLL_R - 0.12, ROLL_R - 0.12, 1.47, 12).rotateZ(Math.PI / 2), 0xc89a5e),
+    F(new THREE.CylinderGeometry(ROLL_R + 0.03, ROLL_R + 0.03, 0.3, 12).rotateZ(Math.PI / 2).translate(-0.25, 0, 0), 0x3f8f2f),
+    F(new THREE.ConeGeometry(0.1, 0.35, 5).rotateZ(-0.6).translate(0.35, ROLL_R + 0.08, 0), 0x4c7a2a),
+  ]);
   TRAPG = { frame: mergeGeometries(frame), arm: mergeGeometries(arm), cones: mergeGeometries(cones), tileFrame: mergeGeometries(tileFrame),
-    plate: new THREE.BoxGeometry(SPIKE_W, 0.07, 2.0).translate(0, 0.035, 0), barrel, snow, rock };
+    plate: new THREE.BoxGeometry(SPIKE_W, 0.07, 2.0).translate(0, 0.035, 0), barrel, snow, rock, log };
   TRAPG.coconut = mergeGeometries([F(new THREE.IcosahedronGeometry(0.42, 1), 0x6b4423),
     F(new THREE.IcosahedronGeometry(0.4, 1).translate(0.38, 0.12, 0.1), 0x5a3a1e),
     F(new THREE.ConeGeometry(0.12, 0.3, 5).translate(0.1, 0.5, 0), 0x3f8f2f)]);
@@ -1173,7 +1179,7 @@ function buildTraps(spec, grp, keep, th) {
     });
     LV.spikes.push({ ...ss, tiles });
   }
-  const rgeo = th.key === 'snow' ? TG.snow : th.key === 'lava' ? TG.rock : TG.barrel;
+  const rgeo = th.key === 'snow' ? TG.snow : th.key === 'lava' ? TG.rock : th.key === 'jungle' ? TG.log : TG.barrel;
   for (const rs of spec.rollers || []) {
     const m = new THREE.Mesh(rgeo, MAT.decor); m.position.set(rs.x, ROLL_R, rs.z); grp.add(m);
     const r = { ...rs, kind: 'roller', w: 1.4, d: 1.4, hp: 1, max: 1, alive: true, armed: false, rolling: false, mesh: m, wob: 0 };
