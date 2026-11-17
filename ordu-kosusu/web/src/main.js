@@ -712,7 +712,7 @@ function updateBoss(dt) {
   if (b.state === 'dead') {
     b.group.rotation.x = Math.min(1.5, b.group.rotation.x + dt * 2.2);
     b.group.position.y = -Math.max(0, b.t - 0.6) * 2;
-    if (b.t > 0.55 && !b.boomed) { b.boomed = true; S.shake = 1; sfx.play('slam'); burst(b.x, 1, b.z + 2, 0xd8343f, 40, 9, 2.2, 16, 9); }
+    if (b.t > 0.55 && !b.boomed) { b.boomed = true; S.shake = 1; sfx.play('slam'); pulse('bad'); burst(b.x, 1, b.z + 2, 0xd8343f, 40, 9, 2.2, 16, 9); }
     return;
   }
   const reach = 3.0 * b.s + 0.4;
@@ -849,6 +849,7 @@ function changeCount(newCount, good) {
   if (diff > 0) burst(squad.x, 1, squad.z, 0x8fd0ff, Math.min(24, 6 + diff), 4, 0.6, 6, 4);
   sfx.play(good ? 'good' : 'bad');
   vibrate(good ? 15 : 45);
+  if (Math.abs(diff) >= 10) pulse(good ? 'good' : 'bad');
 }
 
 function blockDestroyed(b, reward) {
@@ -863,7 +864,7 @@ function blockDestroyed(b, reward) {
       // new uniforms: everyone pops into the new look
       for (const s of squad.sold) s.k = 0.35;
     }
-    toast(WEAPONS[b.tier].name + '!');
+    weaponPopup(b.tier);
     sfx.play('upgrade');
     burst(squad.x, 1.2, squad.z, WEAPONS[b.tier].bullet, 24, 5, 0.6, 5, 5);
   } else if (b.kind === 'soldier') {
@@ -985,7 +986,7 @@ function updateObstacles(dt) {
       g.passed = true;
       g.side = squad.x < 0 ? 0 : 1;
       const op = g.ops[g.side];
-      toast(opText(op), !isGood(op));
+      floatText(opText(op), !isGood(op) ? 'bad' : '');
       changeCount(applyOp(op, S.count), isGood(op));
       if (S.state !== 'play') return;
     }
@@ -1180,6 +1181,8 @@ function lose() {
   save.coins += S.runCoins; persist();
   $('lCoins').textContent = S.runCoins;
   updateCoinsHud();
+  $('loseTip').textContent = loseTip();
+  pulse('bad');
   $('loseSub').textContent = LV.boss.state !== 'idle' ? LV.boss.name + ' çok güçlüydü!' : 'Ordun dağıldı!';
   $('bossBar').classList.add('hidden');
 }
@@ -1189,7 +1192,9 @@ function finishWin() {
   save.coins += reward; save.level = L + 1; persist();
   $('wSold').textContent = fmt(S.count);
   $('wColl').textContent = S.collected;
-  $('wCoins').textContent = reward;
+  showStars(S.count >= 30 ? 3 : S.count >= 10 ? 2 : 1);
+  countUp($('wCoins'), reward);
+  pulse('good');
   $('winSub').textContent = 'Seviye ' + L + ' tamamlandı' + (L % 10 === 0 ? ' · Yeni bölüm açıldı!' : '');
   $('winPanel').classList.remove('hidden');
   updateCoinsHud();
@@ -1331,14 +1336,91 @@ function toast(text, bad) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 950);
 }
 function vibrate(ms) { if (save.vibe && navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) { /* ignore */ } } }
-function updateCoinsHud() { $('coins').textContent = fmt(save.coins + (S.state === 'play' || S.state === 'boss' ? S.runCoins : 0)); }
+// CSS-only juice: floating text, full-screen pulse, counter bump
+function floatText(text, cls) {
+  const host = $('fx');
+  while (host.children.length > 4) host.removeChild(host.firstChild);
+  const el = document.createElement('div');
+  el.className = 'fl ' + (cls || '');
+  el.textContent = text;
+  el.style.marginLeft = ((Math.random() - 0.5) * 40).toFixed(0) + 'px';
+  el.addEventListener('animationend', () => el.remove());
+  host.appendChild(el);
+}
+function weaponPopup(tier) {
+  const w = WEAPONS[tier], el = $('wpn');
+  el.querySelector('b').textContent = w.name;
+  el.querySelector('.wi').innerHTML = '<svg viewBox="0 0 24 24"><path d="M2 9h13l2-2h4v4h-3v2h-5l-1 2h-3l-1 5H5l1-5H2z" fill="' + w.icon + '"/><circle cx="20.5" cy="9" r="1.6" fill="#' + w.bullet.toString(16).padStart(6, '0') + '"/></svg>';
+  el.classList.remove('go'); void el.offsetWidth; el.classList.add('go');
+}
+function pulse(kind) {
+  const el = $('pulse');
+  el.className = kind || '';
+  void el.offsetWidth; el.classList.add('go');
+}
+let shownCoins = -1;
+function updateCoinsHud() {
+  const v = save.coins + (S.state === 'play' || S.state === 'boss' ? S.runCoins : 0);
+  $('coins').textContent = fmt(v);
+  if (shownCoins >= 0 && v > shownCoins) {
+    const p = $('coins').parentNode;
+    p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump');
+  }
+  shownCoins = v;
+}
+function countUp(el, to) {
+  // short rAF count-up, only while the win panel is open
+  const t0 = performance.now(), dur = 900;
+  const tick = (now) => {
+    const k = Math.min(1, (now - t0) / dur);
+    el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3)));
+    if (k < 1 && !$('winPanel').classList.contains('hidden')) requestAnimationFrame(tick);
+    else el.textContent = to;
+  };
+  el.textContent = 0;
+  requestAnimationFrame(tick);
+}
+function showStars(n) {
+  document.querySelectorAll('#stars svg').forEach((el, i) => {
+    el.classList.remove('on', 'off'); void el.getBoundingClientRect();
+    el.style.setProperty('--d', (0.25 + i * 0.22) + 's');
+    el.classList.add(i < n ? 'on' : 'off');
+    if (i < n) setTimeout(() => sfx.play('coin'), 250 + i * 220);
+  });
+}
+function loseTip() {
+  const d = Object.assign({}, S.deaths); d[S.cause] = (d[S.cause] || 0) + 1;
+  const tips = {
+    gate: 'Kırmızı kapılardan kaçın, yeşil kapıları seç!',
+    wall: 'Duvarlara çarpma; önce ateşle kır!',
+    saw: 'Testerelerin etrafından dolan!',
+    shot: 'Düşman ateşinden kaçmak için kenara geç.',
+    enemy: 'Daha çok asker topla ve ateş gücünü yükselt!',
+    boss: 'Dev için güçlü silah kasalarını kır ve yükseltme al!',
+  };
+  let best = 'enemy', bv = -1;
+  for (const k in tips) if ((d[k] || 0) > bv) { bv = d[k] || 0; best = k; }
+  return 'İpucu: ' + tips[bv > 0 ? best : 'enemy'];
+}
 
 function refreshMenu() {
-  $('lvlPill').textContent = 'SEVİYE ' + save.level + ' · ' + themeFor(save.level).name;
+  const th = themeFor(save.level), idx = (save.level - 1) % 10;
+  $('lvlPill').textContent = 'SEVİYE ' + save.level + ' · ' + th.name;
+  $('wName').textContent = th.name;
+  $('wLv').textContent = 'SEVİYE ' + save.level;
+  const dots = $('dots');
+  if (dots.children.length !== 10) { dots.innerHTML = ''; for (let i = 0; i < 10; i++) dots.appendChild(document.createElement('i')); }
+  for (let i = 0; i < 10; i++) dots.children[i].className = (i < idx ? 'done' : i === idx ? 'cur' : '') + (i === 9 ? ' boss' : '');
   updateCoinsHud();
   document.querySelectorAll('.up').forEach((el) => {
     const k = el.dataset.up, lvl = save[k], maxed = lvl >= UPG[k].max, cost = upCost(k);
     el.querySelector('[data-v]').textContent = k === 'upStart' ? startSoldiers() : lvl + 1;
+    const nx = k === 'upStart' ? (startSoldiers() + 1) + ' asker' : k === 'upRate' ? 'x' + (1 + (lvl + 1) * 0.08).toFixed(2) : 'x' + (1 + (lvl + 1) * 0.1).toFixed(1);
+    el.querySelector('[data-n]').textContent = maxed ? 'MAKS' : nx;
+    const bars = el.querySelector('.lv');
+    if (bars.children.length !== 5) { bars.innerHTML = '<i></i><i></i><i></i><i></i><i></i>'; }
+    const fill = Math.ceil(5 * lvl / UPG[k].max);
+    for (let i = 0; i < 5; i++) bars.children[i].classList.toggle('on', i < fill);
     el.querySelector('[data-c]').textContent = maxed ? 'MAKS' : fmt(cost);
     el.classList.toggle('poor', !maxed && save.coins < cost);
     el.classList.toggle('max', maxed);
@@ -1364,7 +1446,24 @@ function startRun() {
   LV.lastProg = 0;
   updateCoinsHud();
   const L = LV.L;
-  toast(L > 1 && (L - 1) % 10 === 0 ? 'YENİ BÖLÜM: ' + LV.th.name : 'SEVİYE ' + L);
+  if (L > 1 && (L - 1) % 10 === 0) {
+    const sp = $('splash'); sp.querySelector('b').textContent = LV.th.name;
+    sp.classList.remove('go'); void sp.offsetWidth; sp.classList.add('go');
+    sfx.play('upgrade');
+  } else toast('SEVİYE ' + L);
+  showTutorial();
+}
+
+function showTutorial() {
+  let seen = false;
+  try { seen = !!localStorage.getItem('ordu_tut_v1'); localStorage.setItem('ordu_tut_v1', '1'); } catch (e) { /* ignore */ }
+  const old = $('tutorial'); if (old) old.remove();
+  if (seen) return;
+  const t = document.createElement('div');
+  t.id = 'tutorial';
+  t.innerHTML = '<div>Orduyu yönlendirmek için sağa sola kaydır</div><div>Silah kasalarını ateşle kır, yeşil kapıları seç!</div>';
+  t.addEventListener('animationend', (e) => { if (e.animationName === 'tutOut') t.remove(); });
+  document.querySelector('.ui').appendChild(t);
 }
 
 document.querySelectorAll('.up').forEach((el) => el.addEventListener('click', (e) => {
@@ -1378,6 +1477,7 @@ document.querySelectorAll('.up').forEach((el) => el.addEventListener('click', (e
   sfx.play('upgrade'); vibrate(20);
   if (k === 'upStart') { S.count = startSoldiers(); syncSquad(false); burst(0, 1, 0, 0x8fd0ff, 14, 4, 0.6, 6, 4); }
   refreshMenu();
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
 }));
 
 function syncToggles() {
@@ -1388,6 +1488,7 @@ document.querySelectorAll('.tog').forEach((t) => t.addEventListener('click', () 
   save[k] = !save[k]; persist();
   if (k === 'sound') { sfx.enabled = save.sound; if (save.sound) sfx.unlock(); }
   if (k === 'eco') onResize();
+  if (k === 'sound' && S.paused) sfx.stopMusic();
   sfx.play('click');
   syncToggles();
 }));
@@ -1396,13 +1497,16 @@ $('btnGear').addEventListener('click', (e) => {
   sfx.unlock();
   syncToggles();
   $('btnHome').classList.toggle('hidden', S.state === 'menu');
+  $('setTitle').textContent = S.state === 'play' || S.state === 'boss' ? 'DURAKLATILDI' : 'AYARLAR';
+  sfx.stopMusic();
   $('settings').classList.remove('hidden');
   S.paused = true;
 });
-$('btnCloseSet').addEventListener('click', () => { $('settings').classList.add('hidden'); S.paused = false; lastT = performance.now(); });
+$('btnCloseSet').addEventListener('click', () => { $('settings').classList.add('hidden'); S.paused = false; lastT = performance.now(); if (save.sound) sfx.startMusic(); });
 $('btnHome').addEventListener('click', () => {
   if (S.state === 'play' || S.state === 'boss') { save.coins += S.runCoins; persist(); }
   showMenu();
+  if (save.sound) sfx.startMusic();
 });
 $('btnNext').addEventListener('click', () => { sfx.play('click'); showMenu(); });
 $('btnRetry').addEventListener('click', () => { sfx.play('click'); showMenu(); });
