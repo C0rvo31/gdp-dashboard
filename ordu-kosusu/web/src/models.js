@@ -74,6 +74,16 @@ export function cone(r, h, x, y, z, hex, rx = 0, rz = 0, seg = 8) {
   const g = new THREE.ConeGeometry(r, h, seg); if (rx) g.rotateX(rx); if (rz) g.rotateZ(rz); g.translate(x, y, z);
   return prep(g, hex);
 }
+// narrow longitude strip of a (scaled) sphere cap, e.g. a painted stripe over a helmet; phi=PI/2 faces +z
+function stripe(r, x, y, z, hex, phi, w = 0.32, sx = 1, sy = 1, sz = 1, cut = 0.5) {
+  const g = new THREE.SphereGeometry(r, 2, 5, phi - w / 2, w, 0, Math.PI * cut); g.scale(sx, sy, sz); g.translate(x, y, z);
+  return prep(g, hex);
+}
+// hood: sphere cap with an opening facing +z (half-width `gap` radians)
+function hood(r, x, y, z, hex, gap = 0.95, ws = 12, hs = 7, sy = 1, cut = 0.62) {
+  const g = new THREE.SphereGeometry(r, ws, hs, Math.PI / 2 + gap, Math.PI * 2 - gap * 2, 0, Math.PI * cut); g.scale(1, sy, 1); g.translate(x, y, z);
+  return prep(g, hex);
+}
 function torus(R, r, x, y, z, hex, rx = 0, ry = 0, rs = 6, ts = 16, arc = Math.PI * 2, rz = 0) {
   const g = new THREE.TorusGeometry(R, r, rs, ts, arc); if (rz) g.rotateZ(rz); if (rx) g.rotateX(rx); if (ry) g.rotateY(ry); g.translate(x, y, z);
   return prep(g, hex);
@@ -236,33 +246,34 @@ export function buildSoldier(t) {
     p = [torso(c, 1, 0.8, 0x2a3f66), box(0.05, 0.035, 0.02, -0.04, 0.858, 0.108, cd, -0.6, 0, 0.5), box(0.05, 0.035, 0.02, 0.04, 0.858, 0.108, cd, -0.6, 0, -0.5),
       ...pouch(-0.075, 0.74, 0.13, cd, 0.06, 0.05), ...pouch(0.075, 0.74, 0.13, cd, 0.06, 0.05),
       ...belt(0x5a4632, 0xd9dde4), cyl(0.045, 0.045, 0.1, -0.15, 0.49, -0.07, 0x5b7a3e, 8), cyl(0.02, 0.02, 0.03, -0.15, 0.555, -0.07, 0x2b2b2b, 6),
+      box(0.16, 0.13, 0.07, 0.06, 0.56, -0.15, 0xd9b26a), box(0.165, 0.045, 0.075, 0.06, 0.61, -0.152, 0xb08a48), box(0.03, 0.42, 0.02, 0, 0.72, -0.132, 0x8a6a3a, 0, 0, -0.75),
       ...armsAim({ sleeve: c, fore: SKIN, cuff: cd, elbow: SKIN, r: 0.045 }, GRIP[0]),
       ...head({ blush: 0xff9a8a }),
       dome(0.148, 0, 0.985, 0, cap, 12, 5, 1, 0.78, 1.02, 0.5), cyl(0.149, 0.149, 0.02, 0, 0.99, 0, 0x16478f, 12, 0, 0, 1.02, true),
-      box(0.17, 0.016, 0.11, 0, 0.99, 0.15, 0x16478f, -0.12), ball(0.02, 0, 1.1, 0, 0x16478f, 5, 3),
+      box(0.17, 0.016, 0.11, 0, 0.99, 0.15, 0x16478f, -0.12), ball(0.032, 0, 1.098, 0, WHITE, 6, 3),
       glow(box(0.045, 0.045, 0.01, 0, 1.04, 0.142, 0xffc83a, -0.45, 0, Math.PI / 4), 1.3)];
   } else if (t === 1) { // infantry: round helmet w/ band, vest, big backpack + bedroll
     const c = 0x2f8cff, vest = 0x1d5bb8, hel = 0x2a6ad6;
     p = [torso(c, 1, 0.8, 0x2a3f66), box(0.29, 0.21, 0.05, 0, 0.69, 0.115, vest),
       ...pouch(-0.07, 0.635, 0.148, 0x174a99), ...pouch(0.07, 0.635, 0.148, 0x174a99),
-      ...belt(0x3a2f28, 0xffc83a), ...pouch(0.12, 0.5, 0.1, 0x6b5a3a, 0.05, 0.05, 0.6),
+      ...belt(0x3a2f28, 0xffc83a),
       box(0.25, 0.28, 0.13, 0, 0.68, -0.17, 0x3d6db8), box(0.26, 0.08, 0.145, 0, 0.8, -0.17, 0x2c5596),
       box(0.18, 0.1, 0.03, 0, 0.6, -0.245, 0x2c5596), box(0.03, 0.3, 0.03, -0.1, 0.7, -0.105, 0x2c3a55), box(0.03, 0.3, 0.03, 0.1, 0.7, -0.105, 0x2c3a55),
       rod([-0.15, 0.87, -0.17], [0.15, 0.87, -0.17], 0.05, 0.05, 0x9a7650, 10),
       ...armsAim({ sleeve: c, cuff: shade(c, 0.75), glove: 0x6b4a32 }, GRIP[1]),
       ...head({ browY: 0.99, browA: 0.22 }),
       dome(0.168, 0, 0.975, 0, hel, 12, 6, 1, 0.88, 1.06), cyl(0.18, 0.186, 0.026, 0, 0.978, 0, shade(hel, 0.75), 10, 0, 0, 1.06),
-      cyl(0.17, 0.17, 0.035, 0, 1.03, 0, 0x16478f, 12, 0, 0, 1.06, true),
+      cyl(0.17, 0.17, 0.035, 0, 1.03, 0, 0x16478f, 12, 0, 0, 1.06, true), glow(stripe(0.172, 0, 0.976, 0, 0xffd23a, Math.PI / 2, 0.36, 1, 0.88, 1.06), 1.2), glow(stripe(0.172, 0, 0.976, 0, 0xffd23a, -Math.PI / 2, 0.36, 1, 0.88, 1.06), 1.2),
       glow(box(0.05, 0.05, 0.02, 0, 1.075, 0.152, 0xffc83a, 0.55, 0, Math.PI / 4), 1.3),
       limb([-0.125, 0.98, 0.02], [-0.07, 0.86, 0.08], 0.008, 0.008, 0x3a2f28, 4), limb([0.125, 0.98, 0.02], [0.07, 0.86, 0.08], 0.008, 0.008, 0x3a2f28, 4)];
   } else if (t === 2) { // commando: beret + headset, dark tac vest, bandolier, radio pack
-    const c = 0x2364c4, v = 0x1b2a4a, pouchC = 0x26375c, beret = 0x18306a;
+    const c = 0x2364c4, v = 0x1b2a4a, pouchC = 0x26375c, beret = 0x2346a0;
     p = [torso(c, 1.04, 0.82, 0x22324f), box(0.3, 0.23, 0.055, 0, 0.68, 0.118, v),
       ...pouch(-0.075, 0.615, 0.15, pouchC, 0.08), ...pouch(0.075, 0.615, 0.15, pouchC, 0.08),
       rod([-0.16, 0.84, 0.115], [0.15, 0.53, 0.135], 0.022, 0.022, 0x6b4a2a, 6, true),
-      ...[0, 1, 2, 3].map((i) => glow(box(0.022, 0.045, 0.02, -0.11 + i * 0.07, 0.79 - i * 0.07, 0.14, 0xffc040, 0, 0, 0.78), 1.15)),
+      ...[0, 1, 2].map((i) => glow(box(0.022, 0.045, 0.02, -0.08 + i * 0.075, 0.76 - i * 0.075, 0.14, 0xffc040, 0, 0, 0.78), 1.15)),
       ...belt(0x1b1714, 0x9aa3b0),
-      box(0.21, 0.25, 0.12, 0, 0.68, -0.168, 0x2a3a5a),
+      box(0.21, 0.25, 0.12, 0, 0.68, -0.168, 0x3a68b8), box(0.215, 0.07, 0.125, 0, 0.78, -0.17, 0xff8a1a),
       glow(box(0.03, 0.02, 0.01, -0.05, 0.62, -0.23, 0x6cff6c), 1.6), glow(box(0.03, 0.02, 0.01, 0.0, 0.62, -0.23, 0xff4a3a), 1.6),
       limb([0.07, 0.8, -0.19], [0.09, 1.2, -0.22], 0.008, 0.005, 0x111111, 4), glow(ball(0.016, 0.09, 1.2, -0.22, 0xff4a3a, 5, 3), 1.4),
       ...pad(-0.17, v, 0.088), ...pad(0.17, v, 0.088),
@@ -292,7 +303,7 @@ export function buildSoldier(t) {
   } else { // heavy: bulky navy armour, gold-trimmed pads, amber visor, twin-rocket pack
     const n = 0x1f3f7a, pl = 0x2f5fb0, gold = 0xffc83a;
     p = [torso(n, 1.15, 0.9, 0x1a3466), box(0.34, 0.25, 0.075, 0, 0.69, 0.13, pl), box(0.34, 0.03, 0.08, 0, 0.81, 0.13, gold),
-      box(0.12, 0.08, 0.02, 0, 0.7, 0.17, shade(pl, 0.75)), glow(box(0.05, 0.05, 0.01, 0, 0.7, 0.181, gold, 0, 0, Math.PI / 4), 1.2),
+      box(0.12, 0.08, 0.02, 0, 0.7, 0.17, shade(pl, 0.75)),
       ...pad(-0.2, pl, 0.125, gold, 0.8), ...pad(0.2, pl, 0.125, gold, 0.8),
       ...belt(0x1b1714, gold, 0.178), box(0.07, 0.06, 0.034, -0.1, 0.5, 0.15, 0x2a3a5a), box(0.07, 0.06, 0.034, 0.1, 0.5, 0.15, 0x2a3a5a),
       box(0.28, 0.3, 0.14, 0, 0.7, -0.2, 0x2a3a5a),
@@ -303,7 +314,7 @@ export function buildSoldier(t) {
       ...head({ brows: false, mouth: 'line' }),
       dome(0.175, 0, 0.975, 0, n, 12, 7, 1, 0.98, 1.08, 0.6), cyl(0.18, 0.18, 0.04, 0, 1.05, 0, pl, 12, 0, 0, 1.08, true),
       box(0.25, 0.075, 0.05, 0, 0.962, 0.172, 0x14141a), glow(box(0.22, 0.05, 0.03, 0, 0.965, 0.19, 0xffb020), 1.35),
-      box(0.22, 0.065, 0.07, 0, 0.88, 0.11, pl),
+      box(0.22, 0.065, 0.07, 0, 0.88, 0.11, pl), glow(box(0.04, 0.05, 0.3, 0, 1.15, -0.01, gold), 1.15),
       limb([0.12, 1.05, -0.06], [0.14, 1.32, -0.09], 0.008, 0.006, 0x111111, 4), glow(ball(0.018, 0.14, 1.33, -0.09, 0xff4a3a, 5, 3), 1.4)];
   }
   return mirrorX(merge(p));
@@ -317,6 +328,11 @@ export function buildLeg(pants, boot, knee, style) {
     p = [limb([0, 0.02, 0], [0, -0.21, 0.01], 0.026, 0.022, pants, 6), ball(0.036, 0, -0.22, 0.01, pants, 6, 4),
       limb([0, -0.22, 0.01], [0, -0.38, 0], 0.022, 0.02, pants, 6), ball(0.03, 0, -0.39, 0.0, pants, 5, 4),
       box(0.07, 0.035, 0.15, 0, -0.42, 0.03, pants), box(0.08, 0.015, 0.16, 0, -0.44, 0.03, boot)];
+  } else if (style === 'bare') { // bare skin legs, leather shin wraps, sandal sole
+    p = [rod([0, 0.02, 0], [0, -0.36, 0.0], 0.056, 0.042, pants, 7, true), ball(0.046, 0, -0.375, 0.0, pants, 5, 3),
+      box(0.085, 0.05, 0.16, 0, -0.41, 0.035, pants), box(0.1, 0.02, 0.18, 0, -0.437, 0.035, 0x3a2414),
+      cyl(0.05, 0.047, 0.1, 0, -0.29, 0, boot, 7, 0, 0, 1, true), cyl(0.059, 0.059, 0.022, 0, -0.17, 0, boot, 7, 0, 0, 1, true)];
+    if (knee !== undefined && knee !== null) p.push(box(0.09, 0.02, 0.02, 0, -0.24, 0.05, knee));
   } else if (style === 'armor') {
     p = [rod([0, 0.02, 0], [0, -0.24, 0.0], 0.058, 0.05, pants, 8, true), box(0.11, 0.2, 0.12, 0, -0.29, 0.005, boot),
       ball(0.05, 0, -0.2, 0.052, knee ?? boot, 6, 4, 1.1, 1, 0.7), box(0.125, 0.07, 0.19, 0, -0.395, 0.03, boot),
@@ -342,6 +358,13 @@ function enemyRifle(wood, metal, accent, X = 0.07, Y = 0.735) {
     box(0.038, 0.12, 0.05, X, Y - 0.085, 0.34, 0x1b1d23, 0.35), box(0.034, 0.06, 0.04, X, Y - 0.065, 0.22, 0x1b1d23, -0.25),
     box(0.03, 0.04, 0.16, X, Y + 0.065, 0.3, 0x1b1d23), glow(box(0.032, 0.032, 0.01, X, Y + 0.065, 0.385, accent), 1.6),
     glow(box(0.014, 0.03, 0.014, X, Y + 0.035, 0.74, accent), 1.4)];
+}
+// leafy hem: open cone ring whose bottom edge zig-zags (every other vertex raised)
+function leafRing(rt, rb, h, y, hex, seg = 10, rot = 0, sz = 0.85) {
+  const g = new THREE.CylinderGeometry(rt, rb, h, seg, 1, true), p = g.attributes.position;
+  for (let i = seg + 1; i < p.count; i++) if ((i - seg - 1) % 2) p.setY(i, p.getY(i) + h * 0.38);
+  g.rotateY(rot); g.scale(1, 1, sz); g.translate(0, y, 0); g.computeVertexNormals();
+  return prep(g, hex);
 }
 const aimArms = (sleeve, glove, cuff, g) => armsAim({ sleeve, glove, cuff, padded: true }, g);
 export const ENEMY_MODELS = {
@@ -448,6 +471,45 @@ export const ENEMY_MODELS = {
       dome(0.152, 0, 1.0, 0, 0x3a3236, 12, 5, 1, 0.7, 1), cyl(0.152, 0.152, 0.025, 0, 1.0, 0, 0x5a4a3a, 12, 0, 0, 1, true),
       cone(0.03, 0.12, -0.13, 1.08, 0, rust, 0, 0.8, 5), cone(0.03, 0.12, 0.13, 1.08, 0, rust, 0, -0.8, 5)];
   },
+  tribal() { // jungle warrior: war paint, feather headdress, leaf skirt, stone spear raised, painted shield
+    const skin = 0xa8683a, paint = 0xff8a1a, chalk = 0xf3ecdc, leaf = 0x4f9a2e, leaf2 = 0x2f7a24, wood = 0x8a5a2b, h = RAISE;
+    const feathers = [0xff3a2a, 0xff8a1a, 0xffd23a, 0x3fbf4a, 0xffd23a, 0xff8a1a, 0xff3a2a];
+    return [torso(skin, 1.02, 0.8, 0x6b4426),
+      box(0.2, 0.025, 0.012, 0, 0.74, 0.135, paint, 0, 0, 0.25), box(0.2, 0.025, 0.012, 0, 0.68, 0.136, chalk, 0, 0, -0.25),
+      torus(0.118, 0.014, 0, 0.855, 0.02, chalk, Math.PI / 2 - 0.25, 0, 3, 12),
+      cone(0.016, 0.05, -0.05, 0.82, 0.12, chalk, Math.PI, 0, 4), cone(0.016, 0.05, 0.05, 0.82, 0.12, chalk, Math.PI, 0, 4), cone(0.02, 0.06, 0, 0.8, 0.13, paint, Math.PI, 0, 4),
+      ...belt(0x6b4426, 0xffd23a, 0.16), leafRing(0.16, 0.24, 0.2, 0.39, leaf, 10, 0), leafRing(0.165, 0.215, 0.16, 0.42, leaf2, 10, 0.31),
+      ...armsMelee({ sleeve: skin, glove: skin, cuff: paint, r: 0.048 }),
+      rod([h[0] + 0.01, h[1] - 0.36, h[2] - 0.14], [h[0] - 0.02, h[1] + 0.5, h[2] + 0.2], 0.018, 0.018, wood, 6),
+      cone(0.04, 0.13, h[0] - 0.025, h[1] + 0.56, h[2] + 0.225, 0x8a8f99, 0.38, 0, 4),
+      glow(box(0.02, 0.09, 0.012, h[0] + 0.02, h[1] + 0.41, h[2] + 0.17, 0xff3a2a, 0.38, 0, -0.5), 1.3),
+      ...head({ skin, ears: false, browA: 0.5, browCol: 0x1a1012, mouth: 'frown', mouthCol: 0x3a1410, noseCol: 0x8a5030 }),
+      box(0.035, 0.03, 0.012, -0.052, 0.922, 0.122, chalk, 0, -0.35), box(0.035, 0.03, 0.012, 0.052, 0.922, 0.122, chalk, 0, 0.35),
+      cyl(0.142, 0.142, 0.04, 0, 1.04, 0, paint, 12, 0, 0, 1, true), dome(0.137, 0, 1.0, 0, 0x2a1a12, 12, 4, 1, 0.85, 1),
+      ...feathers.map((c, i) => { const a = (i - 3) * 0.32; return box(0.05, 0.2, 0.012, Math.sin(a) * 0.12, 1.15 + Math.cos(a) * 0.02, -0.06 - Math.cos(a) * 0.04, c, -0.35, 0, -a * 0.9); }),
+      glow(ball(0.03, 0, 1.045, 0.148, 0x3fbf4a, 6, 4, 1, 1, 0.6), 1.3)];
+  },
+  blowgun() { // camouflaged hunter: ghillie hood, bandana, long bamboo blowgun aimed forward
+    const camo = 0x4f7a2e, dark = 0x2f4a1c, brown = 0x6b4f2a, skin = 0xc8915e, bamboo = 0xd9c27a, acc = 0xb6ff3a;
+    const A = [0.025, 0.9, 0.15], B = [0.07, 0.765, 0.86], P = (t) => lerp3(A, B, t);
+    const tufts = [[-0.15, 1.02, -0.02, 0.6], [0.15, 1.02, -0.02, -0.6], [-0.09, 1.12, -0.04, 0.3], [0.09, 1.12, -0.04, -0.3], [0, 1.15, -0.06, 0],
+      [-0.12, 0.95, -0.13, 1.0], [0.12, 0.95, -0.13, -1.0], [0, 1.06, -0.16, 0]];
+    return [torso(camo, 1.05, 0.84, 0x4a5a2a),
+      box(0.12, 0.1, 0.012, -0.06, 0.72, 0.138, dark, 0, 0, 0.4), box(0.09, 0.07, 0.012, 0.07, 0.62, 0.136, brown, 0, 0, -0.3),
+      ...belt(0x3a2a1a, 0x9aa3b0, 0.162),
+      cyl(0.04, 0.035, 0.3, 0.08, 0.72, -0.15, brown, 7, 0.35, -0.2), glow(cone(0.022, 0.05, 0.11, 0.9, -0.08, 0xff3a2a, 0.35, -0.2, 4), 1.3),
+      glow(cone(0.022, 0.05, 0.07, 0.9, -0.1, acc, 0.35, -0.2, 4), 1.2),
+      ...pad(-0.17, dark, 0.085), ...pad(0.17, dark, 0.085),
+      cone(0.03, 0.12, -0.21, 0.82, 0, camo, 0, 1.2, 3), cone(0.03, 0.12, 0.21, 0.82, 0, camo, 0, -1.2, 3),
+      ...armsAim({ sleeve: camo, glove: brown, cuff: dark, padded: true }, { er: [0.2, 0.7, 0.14], hr: [0.035, 0.845, 0.3], el: [-0.1, 0.7, 0.3], hl: [0.052, 0.79, 0.58] }),
+      rod(A, B, 0.017, 0.019, bamboo, 6), ...[0.3, 0.55, 0.8].map((t) => rod(lerp3(A, B, t - 0.012), lerp3(A, B, t + 0.012), 0.023, 0.023, 0x9a7a3a, 6, true)),
+      glow(rod(P(0.985), B, 0.026, 0.026, acc, 6, true), 1.5), cone(0.008, 0.05, P(0.2)[0], P(0.2)[1] + 0.02, P(0.2)[2], 0xff3a2a, 0, 0, 3),
+      ...head({ skin, ears: false, browA: 0.55, browCol: 0x1a1a0e, mouth: 'none', nose: false, eyeY: 0.958 }),
+      box(0.05, 0.014, 0.012, -0.052, 0.935, 0.12, 0x2f4a1c, 0, 0, -0.2), box(0.05, 0.014, 0.012, 0.052, 0.935, 0.12, 0x2f4a1c, 0, 0, 0.2), // camo paint
+      cyl(0.142, 0.128, 0.075, 0, 0.892, 0, brown, 12, 0, 0, 1, true), cone(0.05, 0.1, 0, 0.88, -0.14, brown, -2.4, 0, 4),
+      hood(0.178, 0, 0.955, -0.02, camo, 0.85, 12, 7, 1.06, 0.6), torus(0.15, 0.03, 0, 0.955, 0.06, dark, 0, 0, 4, 12),
+      ...tufts.map(([x, y, z, rz], i) => cone(0.04, 0.13, x, y, z, i % 2 ? dark : 0x6aa03a, -0.3, rz, 3))];
+  },
   demon() { // horned demon casting with a fire staff held forward
     const c = 0x8a1c1c, skin = 0xc0392b, horn = 0x1a1416, fire = 0xff7a1a;
     const top = [0.07, 1.06, 0.6];
@@ -468,6 +530,7 @@ export const ENEMY_MODELS = {
 export const ENEMY_LEGS = {
   raider: [0x4a1d29, 0x2b1d18, 0x3a2228], gunner: [0x2b2f3a, 0x1d1a18], nomad: [0xc9a06a, 0x6b4426], bandit: [0x3d5a80, 0x6b4426],
   knight: [0x6a7385, 0xb8c4d6, 0xffc83a, 'armor'], frost: [0xc7d3e0, 0x5a4a3a, 0x9fb4c8], skeleton: [0xefe8d8, 0x3a3236, undefined, 'bone'], demon: [0x2a1416, 0x120c0e],
+  tribal: [0xa8683a, 0x6b4426, 0xff8a1a, 'bare'], blowgun: [0x4a5a2a, 0x3a2a1a, 0x2f4a1c],
 };
 export const buildEnemy = (type) => mirrorX(merge(ENEMY_MODELS[type]()));
 export const buildEnemyLeg = (type) => { const l = ENEMY_LEGS[type]; return buildLeg(l[0], l[1], l[2], l[3]); };
