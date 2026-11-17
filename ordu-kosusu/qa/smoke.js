@@ -197,9 +197,10 @@ const S = (p, expr, arg) => p.evaluate(expr, arg);
     if (await S(p, () => __T.vis('settings'))) await click('#btnCloseSet');
 
     console.log('# ANA MENÜ mid-run keeps run coins');
-    const home = await S(p, () => { __T.bot(60, (G) => G.S.runCoins > 0); return { run: __G.S.runCoins, coins: __G.save.coins, st: __G.S.state }; });
+    // (the run above went on in real time unsteered; start a fresh one so it is alive)
+    const home = await S(p, () => { __G.showMenu(); __G.startRun(); __T.bot(60, (G) => G.S.runCoins > 0); return { run: __G.S.runCoins, coins: __G.save.coins, st: __G.S.state }; });
     await click('#btnGear'); await click('#btnHome');
-    ok(home.run > 0 && await S(p, () => __G.save.coins) === home.coins + home.run && await S(p, () => __G.S.state === 'menu'), `ANA MENÜ banks ${home.run} run coins and returns to menu`);
+    ok(home.run > 0 && await S(p, () => __G.save.coins) === home.coins + home.run && await S(p, () => __G.S.state === 'menu'), `ANA MENÜ banks ${home.run} run coins and returns to menu (${home.st})`);
     ok(await S(p, () => __G.LV.L === 2 && document.getElementById('coins').textContent.length > 0), 'menu rebuilt for the same level');
 
     console.log('# ANA MENÜ right after the boss dies still counts the win');
@@ -253,7 +254,7 @@ const S = (p, expr, arg) => p.evaluate(expr, arg);
     await click('#btnNext');
     ok(await S(p, () => __G.LV.L === 41 && __G.LV.th.key === 'meadow' && !__G.scene.children.find(o => o.isPoints).visible), 'level 41 wraps to the meadow world');
     await tapStart();
-    ok(await S(p, () => document.getElementById('toast').textContent.includes('YENİ BÖLÜM')), 'new world toast on 41');
+    ok(await S(p, () => { const sp = document.getElementById('splash'); return sp ? sp.classList.contains('go') && sp.textContent.includes('ÇAYIR') : document.getElementById('toast').textContent.includes('YENİ BÖLÜM'); }), 'new world splash on 41');
     ok(await S(p, () => __T.bot(220)) !== 'play', 'level 41 plays to an end state');
 
     console.log('# busy scene: draw calls / update cost (report)');

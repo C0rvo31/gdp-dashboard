@@ -1338,7 +1338,7 @@ document.addEventListener('visibilitychange', () => {
     // app sent to background mid-run: come back to the pause screen instead of a running fight
     if ((S.state === 'play' || S.state === 'boss') && !S.paused) openSettings();
   }
-  else { startLoop(); if (save.sound) sfx.unlock(); }
+  else { startLoop(); if (save.sound) { sfx.unlock(); if (S.paused) sfx.stopMusic(); } } // unlock restarts music; keep the pause screen quiet
 });
 
 // ============================================================ UI
