@@ -823,6 +823,7 @@ function disposeLevel() {
 }
 
 // ---------- arming: decide numbers from the army you actually have
+const groupSize = (g) => Math.max(3, Math.min(600, Math.round(S.count * Math.min(g.f, 1.25) * (g.T.shoots ? 0.7 : 1))));
 function armObjects() {
   const lim = squad.z + ARM_DIST;
   for (const g of LV.gates) {
@@ -849,7 +850,7 @@ function armObjects() {
   for (const g of LV.enemies) {
     if (g.armed || g.z > squad.z + ENEMY_ARM) continue;
     g.armed = true;
-    g.count = Math.max(3, Math.min(g.cap || 600, Math.round(S.count * Math.min(g.f, 1.25) * (g.T.shoots ? 0.7 : 1))));
+    g.count = groupSize(g);
     // one enemy takes about 1.5 s (x type toughness) of a single soldier's fire
     g.hp = Math.max(0.05, Math.sqrt(g.T.hp) * LV.hpMul * refPS(g.z) * 1.1); // hp 0 -> pool NaN
     const dE = dims(g.count);
@@ -1297,7 +1298,7 @@ function updateObstacles(dt) {
       floatText(opText(op), !isGood(op) ? 'bad' : '');
       changeCount(applyOp(op, S.count), isGood(op));
       // a bad pick before a fight must not be fatal: groups sized before the gate shrink to the new army (never grow)
-      for (const e of LV.enemies) if (e.armed && e.alive && e.state !== 'fight' && e.z - squad.z < 30 && !isGood(op)) { e.cap = e.count; e.armed = false; e.sold.length = 0; }
+      if (!isGood(op)) for (const e of LV.enemies) if (e.armed && e.alive && e.state !== 'fight' && e.z > squad.z && e.count > groupSize(e)) { e.count = groupSize(e); syncGroup(e, false); }
       if (S.state !== 'play') return;
     }
     if (g.passed && g.t < 1) {
@@ -1366,6 +1367,7 @@ function updateObstacles(dt) {
 const HAM_PIV = 8.0, HAM_LEN = 7.3;     // pendulum pivot height and arm length (head grazes the road at the bottom)
 const SPIKE_W = 3.2;                    // one spike tile covers a 3.2 wide lane
 const ROLL_R = 0.68;                    // roller radius
+const SPIKE_CAP = 10;                   // one spike tile pops up and catches at most this many soldiers (long columns flow over it)
 let TRAPG = null;
 function trapGeo() {
   if (TRAPG) return TRAPG;
@@ -1443,7 +1445,7 @@ function buildTraps(spec, grp, keep, th) {
       const plate = new THREE.Mesh(TG.plate, mat); plate.position.set(t.x, 0, ss.z); grp.add(plate);
       const fr = new THREE.Mesh(TG.tileFrame, MAT.decor); fr.position.set(t.x, 0, ss.z); grp.add(fr);
       const cones = new THREE.Mesh(TG.cones, MAT.decor); cones.position.set(t.x, -0.85, ss.z); grp.add(cones);
-      return { ...t, mat, cones, st: 0 };
+      return { ...t, mat, cones, st: 0, hits: 0 };
     });
     LV.spikes.push({ ...ss, tiles });
   }
@@ -1505,7 +1507,7 @@ function animateTraps(dt) {
       else if (c > ss.period - ss.warn) { st = 1; y = -0.55 + Math.sin(S.t * 40) * 0.03; }
       else { st = 0; y = -0.85; }
       t.cones.position.y = y;
-      if (st !== t.st) { t.st = st; t.mat.color.setHex(st === 1 ? 0xff4650 : st === 2 ? 0x8a1f2b : 0x3c4458); }
+      if (st !== t.st) { t.st = st; if (st === 2) t.hits = 0; t.mat.color.setHex(st === 1 ? 0xff4650 : st === 2 ? 0x8a1f2b : 0x3c4458); }
     }
   }
   for (const r of LV.rollers) {
@@ -1576,12 +1578,13 @@ function updateTraps(dt) {
   for (const ss of LV.spikes) {
     if (ss.z - ss.depth / 2 > front || ss.z + ss.depth / 2 < back) continue;
     for (const t of ss.tiles) {
-      if (t.st !== 2) continue;
+      if (t.st !== 2 || t.hits >= SPIKE_CAP) continue;
       for (let i = squad.sold.length - 1; i >= 0; i--) {
         const s = squad.sold[i];
         if (s && Math.abs(s.z - ss.z) < ss.depth / 2 && Math.abs(s.x - t.x) < SPIKE_W / 2) {
-          S.cause = 'spikes'; killSoldier(i);
+          S.cause = 'spikes'; killSoldier(i); t.hits++;
           if (S.state !== 'play') return;
+          if (t.hits >= SPIKE_CAP) break;
         }
       }
     }

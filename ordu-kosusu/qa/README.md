@@ -5,7 +5,7 @@ Build first: `cd web && node build.mjs`. Screenshots land in `qa/out/` (git-igno
   All bots dodge walls/saws/hammers/spikes/rollers with a lane planner; only the random-gate bot guesses gates.
   `DUMB_LEVELS=…` picks the random-gate bot's levels, `UP=4` gives the first bot upgrades, `PLAN=1` prints each level's
   segment patterns, `TRACE=1` logs steering near hazards and every melee fight.
-  `HUMAN=31,32,… RUNS=6` adds a human-ish bot (re-steers 5x/s, sees hazards only 0.3 s ahead, misreads 15% of gates).
+  `ONLY=smart,up4,human,dumb` runs only those bots. `HUMAN=31,32,… RUNS=6` adds a human-ish bot (re-steers 5x/s, sees hazards only 0.3 s ahead, misreads 15% of gates).
 - `node qa/traps.js` — screenshots of the trap mechanics (pendulum hammer, spike strip, barrel / snowball / boulder).
 - `node qa/worlds.js` — gameplay screenshot of each world (L1/11/21/31) with enemies near, plus boss scenes.
 - `node qa/smoke.js` — end-to-end regression test (exit code 1 on failure, ~2-4 min): tap/swipe start, pointer steering,

@@ -17,7 +17,7 @@ const { chromium, devices } = require('playwright');
     ['spikes', 11, 'G => G.LV.spikes.some(s => s.z - G.squad.z < 10 && s.z - G.squad.z > 6 && s.tiles.some(t => t.st === 2))'],
     ['barrel', 14, 'G => G.LV.rollers.some(r => r.rolling && r.alive && r.z - G.squad.z < 13 && r.z - G.squad.z > 8)'],
     ['snowball', 22, 'G => G.LV.rollers.some(r => r.rolling && r.alive && r.z - G.squad.z < 13 && r.z - G.squad.z > 8)'],
-    ['boulder', 31, 'G => G.LV.rollers.some(r => r.rolling && r.alive && r.z - G.squad.z < 13 && r.z - G.squad.z > 8)'],
+    ['boulder', 33, 'G => G.LV.rollers.some(r => r.rolling && r.alive && r.z - G.squad.z < 13 && r.z - G.squad.z > 8)'],
     ['coconut', 41, 'G => G.LV.drops.some(c => c.state === "warn" && c.t > c.warn - 0.25)'],
     ['log', 47, 'G => G.LV.rollers.some(r => r.rolling && r.alive && r.z - G.squad.z < 13 && r.z - G.squad.z > 8)'],
     ['mud', 42, 'G => G.LV.muds.some(m => m.z - G.squad.z < 10 && m.z - G.squad.z > 4)'],

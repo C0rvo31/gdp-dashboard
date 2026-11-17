@@ -41,7 +41,8 @@ export function makeOp(d, n) {
     const damp = clamp(1.2 - n / 300, 0.33, 1);
     if (d.mul && n < (d.big ? 40 : 25)) return { k: 'mul', v: n < 6 && d.r2 < 0.5 ? 3 : 2 };
     if (d.big) return { k: 'add', v: nice(Math.max(5, n * (0.6 + d.r * 0.25) * damp + 4)) };
-    return { k: 'add', v: nice(Math.max(3, n * (0.4 + d.r * 0.6) * damp + 2 + d.r2 * 4)) };
+    // lift: a flat bonus that grows with the boss HP floor, so a small army (after a misread) can climb back
+    return { k: 'add', v: nice(Math.max(3, n * (0.4 + d.r * 0.6) * damp + 2 + d.r2 * 4 + (d.lift || 0))) };
   }
   const h = d.h || 0;
   if (n < 4 || (d.mul && n > 6)) return { k: 'div', v: !d.soft && n > 12 && d.r2 < 0.1 + h * 0.4 ? 3 : 2 };
@@ -82,7 +83,9 @@ export function genLevel(L) {
   const coinLine = (z, x, n = 7, curve = R(-1.5, 1.5)) => {
     for (let k = 0; k < n; k++) spec.coins.push({ x: clamp(x + Math.sin(k * 0.6) * curve, -4, 4), z: z + k * 1.1 });
   };
-  const gdef = (good, extra) => ({ good, mul: chance(0.4), r: rnd(), r2: rnd(), h: harsh, ...extra });
+  // flat bonus on good gates (see makeOp): bosses have an HP floor that grows per world, a small army must be able to climb back
+  const lift = world < 1 ? 0 : Math.round(world < 2 ? 1 + local * 0.3 : 2 + (Math.min(world, 5) - 2) * 1.6 + local * 0.35);
+  const gdef = (good, extra) => ({ good, mul: chance(0.4), r: rnd(), r2: rnd(), h: harsh, lift, ...extra });
   const gate = (z, mode, soft) => {
     let defs;
     if (mode === 'good') defs = [gdef(true), gdef(true)];
@@ -132,7 +135,8 @@ export function genLevel(L) {
   };
   // a single trap piece (used by intro / mixed patterns); returns length used
   const trapPiece = (m, z, gentle) => {
-    if (m === 'saw') { saw(z); if (!gentle && L >= 5 && chance(0.5)) { saw(z + 7); return 29; } return 22; }
+    // a pair of saws shares its side: a long column (6 wide, up to ~11 deep) can't cross between blades 7 apart
+    if (m === 'saw') { const cx = chance(0.5) ? -1.6 : 1.6; saw(z, { cx }); if (!gentle && L >= 5 && chance(0.5)) { saw(z + 7, { cx }); return 29; } return 22; }
     if (m === 'hammer') { hammer(z, gentle ? { speed: 1.35, amp: 0.56 } : {}); if (!gentle && diff > 5 && chance(0.5)) { hammer(z + 8); return 30; } return 22; }
     if (m === 'spikes') { spikes(z + 2, gentle ? { period: 2.7, up: 0.42 } : {}); if (!gentle && diff > 6 && chance(0.45)) { spikes(z + 9); return 31; } return 24; }
     if (m === 'roller') {
@@ -158,7 +162,8 @@ export function genLevel(L) {
     gate: { min: 1, heat: 0, w: 3, build: (z) => { gate(z, chance(0.25 - harsh * 0.15) ? 'good' : 'choice'); if (chance(0.6)) coinLine(z + 7, R(-3, 3)); return z + R(22, 26); } },
     fight: { min: 1, heat: 0, w: 2.2, build: (z) => { enemy(z + 4); if (chance(0.5)) coinLine(z - 8, R(-3, 3)); return z + R(26, 30); } },
     // gate right before an enemy group: the choice decides the fight
-    gateFight: { min: 2, heat: 0.5, w: 2.2, build: (z) => { gate(z, 'choice', true); enemy(z + 15, { f: TRAPPY[prevK] ? 0.9 : 1.0 }); return z + 15 + R(25, 28); } },
+    // (the finale's group is smaller: a misread there leaves no gate to recover before the boss)
+    gateFight: { min: 2, heat: 0.5, w: 2.2, build: (z, end) => { gate(z, 'choice', true); enemy(z + 15, { f: end ? 0.82 : TRAPPY[prevK] ? 0.9 : 1.0 }); return z + 15 + R(25, 28); } },
     // wall corridor with a weapon crate waiting behind it
     armory: { min: 3, heat: 1, w: 1.0, build: (z) => {
       const tf = R(1.2, 2.0);
@@ -188,8 +193,11 @@ export function genLevel(L) {
     // two or three saws in a row with a coin trail weaving through
     sawGauntlet: { min: 5, heat: 2, w: 1.0, tw: 'saw', build: (z) => {
       const ph = R(0, 6.28);
+      // both blades sweep the same side (the far edge is the safe lane, with the coin trail); the second one
+      // reaches 0.4 further in, so a small army that times the gap can still grab coins near the middle
       const s0 = chance(0.5) ? -1 : 1;
-      for (let j = 0; j < 2; j++) { saw(z + j * 9, { ph: ph + j * 2.1, cx: (j % 2 ? -s0 : s0) * 1.6 }); coinLine(z - 2 + j * 9, (j % 2 ? s0 : -s0) * 3.2, 4, 0); }
+      for (let j = 0; j < 2; j++) saw(z + j * 9, { ph: ph + j * 2.1, cx: s0 * (j ? 1.6 : 2.0), amp: j ? 2.2 : 1.8 });
+      coinLine(z - 2, -s0 * 3.2, 9, 0);
       return z + 31;
     } },
     // tempting big gate, but the hazard sits right on its side of the road
@@ -225,7 +233,7 @@ export function genLevel(L) {
       const free = RI(0, 2), lanes = [-3.33, 0, 3.33].filter((_, i) => i !== free);
       mud(z + 3, lanes, R(5, 7));
       coinLine(z, [-3.33, 0, 3.33][free], 7, 0);
-      enemy(z + 20, { type: th.shooter, f: 0.75 });
+      enemy(z + 20, { type: th.shooter, f: 0.75, xr: (free - 1) * R(0.7, 1) });   // they stand behind the dry lane
       return z + 20 + R(26, 29);
     } },
     // soldiers + an ambush: melee charge with gunners right behind
@@ -242,9 +250,11 @@ export function genLevel(L) {
     } },
     // a trap right in front of an enemy group: dodge, then fight
     trapFight: { min: 6, heat: 3, w: 1.0, build: (z) => {
-      const m = pickTrap('roller') || 'saw';
+      const m = pickTrap('roller') || 'saw', ns = spec.saws.length;
       z += trapPiece(m, z, true) - 4;
-      enemy(z + 6, { f: 0.8, xr: R(-0.5, 0.5) }); return z + 2 + R(27, 30);   // sized before the trap: keep it fair
+      // straight fire: the group waits on the trap's safe side, so lining up a shot never means standing in the trap
+      const xr = spec.saws.length > ns ? -Math.sign(spec.saws[ns].cx) * R(0.6, 1) : R(-0.5, 0.5);
+      enemy(z + 6, { f: 0.8, xr }); return z + 2 + R(27, 30);   // sized before the trap: keep it fair
     } },
   };
 
@@ -300,7 +310,7 @@ export function genLevel(L) {
   // finale before the boss: x10 is a showdown, otherwise a gate decides the last fight
   if (local === 10) plan.push('gate:good', 'showdown');
   else if (local === 4 && L > 10) plan.push('gate', 'ambushEnd');
-  else plan.push('gateFight');
+  else plan.push('gateFight:end');
 
   let z = 26;
   for (const p of plan) {
@@ -313,9 +323,18 @@ export function genLevel(L) {
       crate('soldier', crateX([-2.6, 2.6]), z); z += 18;
       enemy(z, { type: th.melee, f: 1.05, xr: 0 }); enemy(z + 10, { type: th.shooter, f: 0.7 });
       z += 10 + R(28, 30);
-    } else if (k === 'ambushEnd') { enemy(z + 4, { type: th.melee, f: 0.9 }); enemy(z + 13, { type: th.shooter, f: 0.7 }); z += 13 + R(27, 30); }
-    else z = PATTERNS[k].build(z);
+    } else if (k === 'ambushEnd') {
+      // the gunners keep firing while the army is slowed by the melee in front of them: keep them small
+      enemy(z + 4, { type: th.melee, f: 0.85 }); enemy(z + 13, { type: th.shooter, f: 0.55 }); z += 13 + R(27, 30);
+    }
+    else z = PATTERNS[k].build(z, arg);
     prevK = k;
+  }
+  // straight fire: a group waiting behind a saw stands on the saw's safe side
+  for (const e of spec.enemies) {
+    let sw = null;
+    for (const s of spec.saws) if (s.z < e.z && s.z > e.z - 32 && (!sw || s.z > sw.z)) sw = s;
+    if (sw && e.xr * sw.cx >= 0) e.xr = -Math.sign(sw.cx) * Math.max(0.7, Math.abs(e.xr));
   }
   spec.end = z;
   spec.bossLine = z + 6;
