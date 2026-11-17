@@ -110,7 +110,7 @@ export function bonusSpec(L) {
   const th = themeFor(L);
   const rnd = mulberry32(L * 104729 + 3);
   const R = (a, b) => a + (b - a) * rnd();
-  const spec = { th, gates: [], blocks: [], enemies: [], saws: [], coins: [], gems: [], bonus: true };
+  const spec = { th, gates: [], blocks: [], enemies: [], saws: [], coins: [], hammers: [], spikes: [], rollers: [], patterns: ['gold'], gems: [], bonus: true };
   const coin = (x, z) => spec.coins.push({ x: clamp(x, -4, 4), z });
   const gem = (x, z) => { if (spec.gems.length < GEM_MAX) spec.gems.push({ x: clamp(x, -4, 4), z }); };
   const good = () => ({ good: true, mul: rnd() < 0.5, r: rnd(), r2: rnd() });
