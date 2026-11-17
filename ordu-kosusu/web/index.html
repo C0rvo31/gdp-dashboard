@@ -82,6 +82,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
 #dots i.done{background:#5be38a;border-color:#fff}
 #dots i.cur{background:var(--gold);border-color:#fff;animation:dotPulse 1s ease-in-out infinite}
 #dots i.boss{border-radius:4px}
+#dots i.gold{border-radius:3px;transform:rotate(45deg) scale(.86);border-color:#ffe9a0}
+#dots i.gold.cur{animation:none;transform:rotate(45deg) scale(1.2)}
 @keyframes dotPulse{50%{transform:scale(1.35)}}
 #title p{margin:18px auto 0;max-width:300px;line-height:1.25;text-wrap:balance;background:rgba(16,30,60,.4);border-radius:14px;padding:6px 12px;font-weight:800;color:#fff;font-size:15px;text-shadow:0 2px 0 rgba(0,0,0,.3)}
 #bottom{width:100%;display:flex;flex-direction:column;align-items:center;gap:16px}
@@ -133,6 +135,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
 .reward{display:flex;align-items:center;justify-content:center;gap:10px;font-size:34px;font-weight:900;margin:4px 0 18px}
 .reward .coin{width:32px;height:32px}
 .stats{display:flex;gap:8px;margin-bottom:18px}
+.mult{display:inline-block;margin:-6px 0 6px;padding:5px 16px;border-radius:14px;background:linear-gradient(#ffe27a,#ffb21f);color:#7a3d00;font-weight:900;font-size:16px;letter-spacing:1px;box-shadow:0 4px 0 #d98a00;animation:pop .4s .2s cubic-bezier(.2,1.6,.4,1) both}
+.mult b{font-size:24px;margin-right:2px}
 .stats div{flex:1;background:#eef4ff;border-radius:14px;padding:8px 4px;font-weight:800;font-size:12px}
 .stats div b{display:block;font-size:20px;font-weight:900}
 .btn{display:block;width:100%;border:0;border-radius:18px;padding:16px;font-family:inherit;font-weight:900;font-size:22px;letter-spacing:1px;color:#fff;background:linear-gradient(#52a8ff,var(--blue));box-shadow:0 6px 0 var(--blue-d);margin-top:8px}
@@ -203,6 +207,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
       <div class="stars" id="stars"><svg viewBox="0 0 24 24"><path d="M12 1.8l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.5 5.7 21.2l1.5-7.1L1.8 9.2 9 8.4z" fill="#ffc83a" stroke="#e09a00" stroke-width="1.2" stroke-linejoin="round"/></svg><svg viewBox="0 0 24 24"><path d="M12 1.8l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.5 5.7 21.2l1.5-7.1L1.8 9.2 9 8.4z" fill="#ffc83a" stroke="#e09a00" stroke-width="1.2" stroke-linejoin="round"/></svg><svg viewBox="0 0 24 24"><path d="M12 1.8l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.5 5.7 21.2l1.5-7.1L1.8 9.2 9 8.4z" fill="#ffc83a" stroke="#e09a00" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
       <div class="sub" id="winSub">Seviye tamamlandı</div>
       <div class="stats"><div>Kalan Asker<b id="wSold">0</b></div><div>Toplanan<b id="wColl">0</b></div></div>
+      <div class="mult hidden" id="wMult"><b>×1</b> ÇARPAN</div>
       <div class="reward"><span class="coin"></span>+<span id="wCoins">0</span></div>
       <button class="btn green" id="btnNext">DEVAM</button>
     </div>
