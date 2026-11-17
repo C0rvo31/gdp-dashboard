@@ -765,14 +765,14 @@ const BOSS_ATK = {
   sand: { T: 1.1, base: 1, pct: 0.035, hp: 1.05 },
   yeti: { T: 2.2, base: 2.5, pct: 0.08, hp: 1.1 },
   demon: { T: 1.8, base: 2.5, pct: 0.07, hp: 1.15 },
-  gorilla: { T: 2.0, base: 4, pct: 0.10, hp: 1.25 },
+  gorilla: { T: 2.0, base: 4, pct: 0.08, hp: 1.25 },
 };
 function bossAtk(b) { const A = BOSS_ATK[b.kind] || BOSS_ATK.orc; return { T: A.T, base: A.base + LV.L * 0.05, pct: A.pct }; }
 // fixed boss HP: world base x level growth, independent of the army and its weapon
 // fixed boss HP per level: grows with the level inside a world (armies grow) and with the world
 const bossHpFor = (L, kind) => {
   const local = (L - 1) % 10, world = Math.floor((L - 1) / 10);
-  return Math.round(1300 * (BOSS_ATK[kind] || BOSS_ATK.orc).hp * (1 + 0.36 * local) * (1 + 0.45 * world) / 10) * 10;
+  return Math.round(1300 * (BOSS_ATK[kind] || BOSS_ATK.orc).hp * (1 + 0.25 * local) * (1 + 0.3 * world) / 10) * 10;
 };
 function makeBoss(z, L, kind) {
   const b = buildBoss(kind);
@@ -1472,7 +1472,12 @@ function updateShooting(dt) {
 function enterBoss() {
   S.state = 'boss';
   const b = LV.boss;
-  b.hp = b.max = bossHpFor(LV.L, b.kind);
+  // Boss scales with the army's strength (soldiers x weapon), so big armies still get a real fight.
+  // Upgrades are left out on purpose: buying rate/damage still shortens the fight.
+  const w = WEAPONS[S.weapon], local = (LV.L - 1) % 10, world = Math.floor((LV.L - 1) / 10);
+  const target = Math.min(12, (7 + local * 0.35 + world * 0.5) * (BOSS_ATK[b.kind] || BOSS_ATK.orc).hp);
+  const scaled = S.count * w.rate * w.dmg * target;
+  b.hp = b.max = Math.round(Math.max(bossHpFor(LV.L, b.kind), scaled) / 10) * 10;
   b.state = 'walk';
   $('bossBar').querySelector('.bn').textContent = b.name;
   $('bossBar').classList.remove('hidden');
