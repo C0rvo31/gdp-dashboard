@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { Sfx } from './audio.js';
 import { clamp, lerp, ease, mulberry32, makeCanvas, roundRect, canvasTex, setMaxAniso, FONT, fmt, strokeText } from './util.js';
-import { addRim, buildSoldier, buildLeg, SOLDIER_LEGS, buildGun, buildEnemy, buildEnemyLeg } from './models.js';
+import { addRim, buildSoldier, buildLeg, SOLDIER_LEGS, buildGun, buildEnemy, buildEnemyLeg, tint, plain } from './models.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { THEMES, themeFor, themeIndex, themeTextures, buildDecor } from './world.js';
 import { ETYPES, nice, niceHp, applyOp, opText, isGood, makeOp, genLevel } from './levels.js';
 import { buildBoss } from './boss.js';
@@ -574,6 +575,9 @@ function buildLevel(L) {
     LV.saws.push({ ...ss, x: 0, blade });
   }
 
+  // traps: pendulum hammers, spike strips, rolling barrels (see TRAPS section)
+  buildTraps(spec, grp, keep, th);
+
   // enemy groups (sized when armed)
   for (const es of spec.enemies) {
     const T2 = ETYPES[es.type];
@@ -653,6 +657,7 @@ function armObjects() {
     syncGroup(g, true);
     g.label.sprite.visible = true;
   }
+  armTraps(lim);
 }
 
 // ============================================================ boss
@@ -987,7 +992,7 @@ function updateObstacles(dt) {
     }
   }
   for (const sw of LV.saws) {
-    sw.x = Math.sin(S.t * sw.speed + sw.ph) * sw.amp;
+    sw.x = (sw.cx || 0) + Math.sin(S.t * sw.speed + sw.ph) * sw.amp;
     sw.blade.position.x = sw.x;
     sw.blade.rotation.z -= dt * 14;
     if (sw.z > squad.z + 1 || sw.z < back - 1) continue;
@@ -1011,11 +1016,188 @@ function updateObstacles(dt) {
   }
 }
 
+// ============================================================ TRAPS (level design): pendulum hammers,
+// pop-up spike strips and rolling barrels / snowballs / boulders. Layout comes from genLevel
+// (spec.hammers / spec.spikes / spec.rollers); everything for them lives in this section.
+const HAM_PIV = 8.0, HAM_LEN = 7.3;     // pendulum pivot height and arm length (head grazes the road at the bottom)
+const SPIKE_W = 3.2;                    // one spike tile covers a 3.2 wide lane
+const ROLL_R = 0.68;                    // roller radius
+let TRAPG = null;
+function trapGeo() {
+  if (TRAPG) return TRAPG;
+  const F = (g, c) => tint(plain(g), c);
+  const span = HALF * 2 + 1.2;
+  const frame = [
+    F(new THREE.BoxGeometry(span + 0.5, 0.36, 0.42).translate(0, HAM_PIV + 0.2, 0), 0x3c4458),
+    F(new THREE.CylinderGeometry(0.3, 0.3, 0.6, 12).rotateX(Math.PI / 2).translate(0, HAM_PIV, 0), 0xffc83a),
+  ];
+  for (const sx of [-1, 1]) {
+    frame.push(F(new THREE.BoxGeometry(0.4, HAM_PIV + 0.4, 0.4).translate(sx * span / 2, (HAM_PIV + 0.4) / 2, 0), 0x6b4a2f));
+    for (let i = 0; i < 4; i++) frame.push(F(new THREE.BoxGeometry(0.43, 0.3, 0.43).translate(sx * span / 2, 0.5 + i * 0.75, 0), i % 2 ? 0x23262e : 0xffc83a));
+    frame.push(F(new THREE.BoxGeometry(0.8, 0.2, 0.8).translate(sx * span / 2, 0.1, 0), 0x3c4458));
+  }
+  const arm = [
+    F(new THREE.BoxGeometry(0.16, HAM_LEN, 0.16).translate(0, -HAM_LEN / 2, 0), 0x9aa3b0),
+    F(new THREE.BoxGeometry(1.4, 1.1, 1.3).translate(0, -HAM_LEN, 0), 0x2e323c),
+    F(new THREE.BoxGeometry(1.46, 1.16, 0.2).translate(0, -HAM_LEN, 0.38), 0xff4650),
+    F(new THREE.BoxGeometry(1.46, 1.16, 0.2).translate(0, -HAM_LEN, -0.38), 0xff4650),
+    F(new THREE.BoxGeometry(1.6, 0.9, 1.05).translate(0, -HAM_LEN, 0), 0xbfc8d4),
+  ];
+  const cones = [];
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) {
+    cones.push(F(new THREE.ConeGeometry(0.15, 0.78, 6).translate(-1.3 + i * 0.52 + (j % 2) * 0.2, 0.39, -0.72 + j * 0.48), 0xdfe5ee));
+  }
+  const tileFrame = [];
+  for (const sz of [-1, 1]) tileFrame.push(F(new THREE.BoxGeometry(SPIKE_W, 0.1, 0.16).translate(0, 0.05, sz * 1.0), 0xffc83a));
+  const barrel = mergeGeometries([
+    F(new THREE.CylinderGeometry(ROLL_R, ROLL_R, 1.3, 14).rotateZ(Math.PI / 2), 0x9a5a2b),
+    F(new THREE.CylinderGeometry(ROLL_R + 0.03, ROLL_R + 0.03, 0.12, 14).rotateZ(Math.PI / 2).translate(0.42, 0, 0), 0x3c4458),
+    F(new THREE.CylinderGeometry(ROLL_R + 0.03, ROLL_R + 0.03, 0.12, 14).rotateZ(Math.PI / 2).translate(-0.42, 0, 0), 0x3c4458),
+    F(new THREE.CylinderGeometry(0.2, 0.2, 1.34, 8).rotateZ(Math.PI / 2), 0xc48a4a),
+  ]);
+  const snow = mergeGeometries([F(new THREE.IcosahedronGeometry(ROLL_R + 0.06, 1), 0xf4f8ff),
+    F(new THREE.IcosahedronGeometry(0.3, 0).translate(0.35, 0.45, 0.3), 0xdfe9f7)]);
+  const rock = mergeGeometries([F(new THREE.DodecahedronGeometry(ROLL_R + 0.05), 0x4a3530),
+    F(new THREE.IcosahedronGeometry(0.2, 0).translate(0.5, 0.25, 0.3), 0xff7a1a),
+    F(new THREE.IcosahedronGeometry(0.18, 0).translate(-0.45, -0.2, 0.42), 0xffc23a)]);
+  TRAPG = { frame: mergeGeometries(frame), arm: mergeGeometries(arm), cones: mergeGeometries(cones), tileFrame: mergeGeometries(tileFrame),
+    plate: new THREE.BoxGeometry(SPIKE_W, 0.07, 2.0).translate(0, 0.035, 0), barrel, snow, rock };
+  return TRAPG;
+}
+
+function buildTraps(spec, grp, keep, th) {
+  const TG = trapGeo();
+  LV.hammers = []; LV.spikes = []; LV.rollers = [];
+  for (const hs of spec.hammers || []) {
+    const frame = new THREE.Mesh(TG.frame, MAT.decor); frame.position.set(0, 0, hs.z); grp.add(frame);
+    const arm = new THREE.Mesh(TG.arm, MAT.decor); arm.position.set(hs.cx, HAM_PIV, hs.z); grp.add(arm);
+    const shadow = new THREE.Mesh(G.shadow, MAT.shadow); shadow.position.set(hs.cx, 0.01, hs.z); grp.add(shadow);
+    LV.hammers.push({ ...hs, arm, shadow, hx: hs.cx, hy: 0, th: 0, hits: 0 });
+  }
+  for (const ss of spec.spikes || []) {
+    const tiles = ss.tiles.map((t) => {
+      const mat = keep(new THREE.MeshLambertMaterial({ color: 0x3c4458 }));
+      const plate = new THREE.Mesh(TG.plate, mat); plate.position.set(t.x, 0, ss.z); grp.add(plate);
+      const fr = new THREE.Mesh(TG.tileFrame, MAT.decor); fr.position.set(t.x, 0, ss.z); grp.add(fr);
+      const cones = new THREE.Mesh(TG.cones, MAT.decor); cones.position.set(t.x, -0.85, ss.z); grp.add(cones);
+      return { ...t, mat, cones, st: 0 };
+    });
+    LV.spikes.push({ ...ss, tiles });
+  }
+  const rgeo = th.key === 'snow' ? TG.snow : th.key === 'lava' ? TG.rock : TG.barrel;
+  for (const rs of spec.rollers || []) {
+    const m = new THREE.Mesh(rgeo, MAT.decor); m.position.set(rs.x, ROLL_R, rs.z); grp.add(m);
+    const r = { ...rs, kind: 'roller', w: 1.4, d: 1.4, hp: 1, max: 1, alive: true, armed: false, rolling: false, mesh: m, wob: 0 };
+    const lbl = new BlockLabel({ kind: 'wall', get hp() { return r.hp; } });
+    keep(lbl.tex);
+    // bullets call label.draw() on every hit: also hide the number the moment the roller breaks
+    r.label = { tex: lbl.tex, draw(force) { lbl.draw(force); if (r.hp <= 0 && r.sprite) r.sprite.visible = false; } };
+    r.sprite = new THREE.Sprite(keep(new THREE.SpriteMaterial({ map: r.label.tex, transparent: true, depthTest: false, fog: false })));
+    r.sprite.scale.set(2.0, 1.0, 1); r.sprite.renderOrder = 19; r.sprite.visible = false; grp.add(r.sprite);
+    LV.rollers.push(r);
+  }
+}
+
+function armTraps(lim) {
+  if (!LV.rollers) return;
+  const d = dims(S.count), frac = Math.min(1, 1.9 / (2 * d.hw));
+  for (const r of LV.rollers) {
+    if (r.armed || r.z > lim) continue;
+    r.armed = true;
+    r.hp = r.max = Math.max(4, niceHp(curDps() * frac * r.tf));
+    r.label.draw(true); r.sprite.visible = true;
+  }
+}
+
+// cycle position of a spike tile: 0..up = spikes out (deadly), last `warn` seconds = warning
+function spikePhase(ss, t) { return (((S.t + t.ph) % ss.period) + ss.period) % ss.period; }
+
+function animateTraps(dt) {
+  if (!LV.hammers) return;
+  for (const h of LV.hammers) {
+    h.th = Math.sin(S.t * h.speed + h.ph) * h.amp;
+    h.arm.rotation.z = h.th;
+    h.hx = h.cx + HAM_LEN * Math.sin(h.th); h.hy = HAM_PIV - HAM_LEN * Math.cos(h.th);
+    h.shadow.position.x = h.hx;
+    h.shadow.scale.setScalar(Math.max(0.5, 3.2 - h.hy * 0.8));
+  }
+  for (const ss of LV.spikes) {
+    for (const t of ss.tiles) {
+      const c = spikePhase(ss, t);
+      let y, st;
+      if (c < ss.up) { st = 2; y = c < 0.07 ? lerp(-0.5, 0, c / 0.07) : 0; }
+      else if (c < ss.up + 0.18) { st = 0; y = lerp(0, -0.85, (c - ss.up) / 0.18); }
+      else if (c > ss.period - ss.warn) { st = 1; y = -0.55 + Math.sin(S.t * 40) * 0.03; }
+      else { st = 0; y = -0.85; }
+      t.cones.position.y = y;
+      if (st !== t.st) { t.st = st; t.mat.color.setHex(st === 1 ? 0xff4650 : st === 2 ? 0x8a1f2b : 0x3c4458); }
+    }
+  }
+  for (const r of LV.rollers) {
+    if (!r.alive) { r.sprite.visible = false; continue; }
+    if (r.wob > 0) { r.wob = Math.max(0, r.wob - dt * 6); r.mesh.scale.setScalar(1 + r.wob * 0.08); }
+    r.sprite.position.set(r.x, ROLL_R * 2 + 0.75, r.z);
+  }
+}
+
+function updateTraps(dt) {
+  if (!LV.hammers) return;
+  animateTraps(dt);
+  if (S.state !== 'play') return;
+  const d = dims(S.count), front = squad.z + 1.5, back = squad.z - d.depth - 1.5;
+  for (const h of LV.hammers) {
+    if (h.hy > 1.2) h.hits = 0;                 // each low swing knocks down at most 6 soldiers
+    if (h.z > front || h.z < back || h.hy > 1.2 || h.hits >= 6) continue;
+    for (let i = squad.sold.length - 1; i >= 0; i--) {
+      const s = squad.sold[i];
+      if (s && Math.abs(s.z - h.z) < 0.72 && Math.abs(s.x - h.hx) < 0.82) {
+        S.cause = 'hammer'; killSoldier(i); h.hits++;
+        if (sfx.throttle('hammer', 180)) { sfx.play('slam'); S.shake = Math.max(S.shake, 0.35); }
+        if (S.state !== 'play') return;
+        if (h.hits >= 6) break;
+      }
+    }
+  }
+  for (const ss of LV.spikes) {
+    if (ss.z - ss.depth / 2 > front || ss.z + ss.depth / 2 < back) continue;
+    for (const t of ss.tiles) {
+      if (t.st !== 2) continue;
+      for (let i = squad.sold.length - 1; i >= 0; i--) {
+        const s = squad.sold[i];
+        if (s && Math.abs(s.z - ss.z) < ss.depth / 2 && Math.abs(s.x - t.x) < SPIKE_W / 2) {
+          S.cause = 'spikes'; killSoldier(i);
+          if (S.state !== 'play') return;
+        }
+      }
+    }
+  }
+  for (const r of LV.rollers) {
+    if (!r.alive) continue;
+    if (!r.rolling && r.armed && r.z - squad.z < 36) r.rolling = true;
+    if (!r.rolling) continue;
+    r.z -= r.speed * dt;
+    r.mesh.position.z = r.z;
+    r.mesh.rotation.x -= (r.speed / ROLL_R) * dt;
+    if (r.z < squad.z - d.depth - 8) { r.alive = false; r.mesh.visible = false; continue; }
+    if (r.z > front || r.z < back) continue;
+    for (let i = squad.sold.length - 1; i >= 0; i--) {
+      const s = squad.sold[i];
+      if (s && Math.abs(s.z - r.z) < r.d / 2 + 0.15 && Math.abs(s.x - r.x) < r.w / 2 + 0.15) {
+        S.cause = 'roller'; killSoldier(i);
+        if (S.state !== 'play') return;
+        r.hp -= Math.max(3 + S.weapon, r.max / 5); r.wob = 1; r.label.draw();
+        if (r.hp <= 0) { blockDestroyed(r, true); break; }
+      }
+    }
+  }
+}
+
 function nearTargets() {
   const list = [];
   const z0 = squad.z - 2, z1 = squad.z + 32;
   for (const b of LV.blocks) if (b.alive && b.armed && b.z > z0 && b.z < z1) list.push(b);
   for (const g of LV.enemies) if (g.alive && g.armed && g.z > z0 && g.z < z1 + 2) list.push(g);
+  for (const r of LV.rollers) if (r.alive && r.armed && r.z > z0 && r.z < z1) list.push(r);
   if (S.state === 'boss' && LV.boss.state !== 'dead' && LV.boss.state !== 'idle') list.push(LV.boss);
   return list;
 }
@@ -1131,6 +1313,7 @@ function updatePlay(dt) {
   armObjects();
   updateFormation(dt);
   updateObstacles(dt);
+  updateTraps(dt);
   if (S.state !== 'play' && S.state !== 'boss') return;
   updateGroups(dt);
   if (S.state !== 'play' && S.state !== 'boss') return;
@@ -1257,7 +1440,8 @@ function update(dt) {
     } else if (S.state === 'menu') {
       updateBoss(dt);
       updateFormation(dt);
-      for (const sw of LV.saws) { sw.x = Math.sin(S.t * sw.speed + sw.ph) * sw.amp; sw.blade.position.x = sw.x; sw.blade.rotation.z -= dt * 14; }
+      animateTraps(dt);
+      for (const sw of LV.saws) { sw.x = (sw.cx || 0) + Math.sin(S.t * sw.speed + sw.ph) * sw.amp; sw.blade.position.x = sw.x; sw.blade.rotation.z -= dt * 14; }
     }
     updateShooting(dt);
     updateEnemyFire(dt);
