@@ -12,8 +12,8 @@ import os
 
 PKG = "com.ordukosusu.game"
 LABEL = "Ordu Koşusu"
-VERSION_CODE = 9
-VERSION_NAME = "1.8"
+VERSION_CODE = 10
+VERSION_NAME = "1.9"
 MIN_SDK = 24
 TARGET_SDK = 34
 ICON_PATH = "res/drawable-xxxhdpi-v4/ic_launcher.png"
