@@ -3,7 +3,8 @@ import { Sfx } from './audio.js';
 import { clamp, lerp, ease, mulberry32, makeCanvas, roundRect, canvasTex, setMaxAniso, FONT, fmt, strokeText } from './util.js';
 import { addRim, buildSoldier, buildLeg, SOLDIER_LEGS, buildGun, buildEnemy, buildEnemyLeg, tint, plain } from './models.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { THEMES, themeFor, themeIndex, themeTextures, buildDecor } from './world.js';
+import { THEMES, themeFor, themeIndex, themeTextures, buildDecor, riverPaths, riverBlocked, buildRivers, skylineMesh } from './world.js';
+import { PMAT, gateFrame, wallDeco, crateTrim, coinGeo, sawTrack, finishProps, arenaProps } from './props.js';
 import { ETYPES, nice, niceHp, applyOp, opText, isGood, makeOp, genLevel } from './levels.js';
 import { buildBoss } from './boss.js';
 
@@ -482,23 +483,59 @@ function buildLevel(L) {
   const gGeo = keep(new THREE.PlaneGeometry(260, len + 120)); gGeo.rotateX(-Math.PI / 2);
   { const uv = gGeo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 26, uv.getY(i) * (len + 120) / 8); }
   const ground = new THREE.Mesh(gGeo, MAT.ground); ground.position.set(0, -0.06, len / 2 - 30); grp.add(ground);
-  const bandGeo = keep(new THREE.PlaneGeometry(3, len)); bandGeo.rotateX(-Math.PI / 2);
-  for (const s of [-1, 1]) { const m = new THREE.Mesh(bandGeo, MAT.ground2); m.position.set(s * (HALF + 1.9), -0.04, len / 2 - 30); grp.add(m); }
+  const bandMat = keep(new THREE.MeshLambertMaterial({ map: T.band }));
+  for (const s of [-1, 1]) {
+    const bandGeo = keep(new THREE.PlaneGeometry(3, len)); bandGeo.rotateX(-Math.PI / 2);
+    { const uv = bandGeo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, s > 0 ? uv.getX(i) : 1 - uv.getX(i), uv.getY(i) * (len / 6)); }
+    const m = new THREE.Mesh(bandGeo, bandMat); m.position.set(s * (HALF + 1.9), -0.04, len / 2 - 30); grp.add(m);
+  }
   const finGeo = keep(new THREE.PlaneGeometry(HALF * 2, 1.4)); finGeo.rotateX(-Math.PI / 2);
   const fin = new THREE.Mesh(finGeo, MAT.checker); fin.position.set(0, 0.01, spec.end + 1); grp.add(fin);
+  const addProp = (pg, x, y, z, parent = grp) => {
+    for (const [geo, mat] of [[pg.solid, PMAT.solid], [pg.glow, PMAT.glow]]) {
+      if (!geo) continue;
+      const m = new THREE.Mesh(keep(geo), mat); m.position.set(x, y, z); parent.add(m);
+    }
+  };
+  addProp(finishProps(th, HALF), 0, 0, spec.end + 1);
+  addProp(arenaProps(th, HALF), 0, 0, spec.bossZ);
+  grp.add(skylineMesh(th));
 
   // decor
   const rnd = mulberry32(L * 31 + 7);
   const wpick = (list) => { let r = rnd(), acc = 0; for (const [k, w] of list) { acc += w; if (r <= acc) return k; } return list[list.length - 1][0]; };
   const decor = {};
   const put = (type, d) => (decor[type] || (decor[type] = [])).push(d);
+  const rivers = riverPaths(th, rnd);
+  const arena = (z, d) => d < 10 && z > spec.bossZ - 27 && z < spec.bossZ + 14;
   for (let z = -30; z < len - 20; z += 2.2) {
     for (const s of [-1, 1]) {
       if (rnd() < 0.4) continue;
-      const d = HALF + 2.6 + Math.pow(rnd(), 1.6) * 24;
-      put(d < 8.5 ? wpick(th.near) : wpick(th.far), [s * d, z + rnd() * 2, 0.75 + rnd() * 0.7, rnd() * 6.28]);
+      const d = HALF + 2.6 + Math.pow(rnd(), 1.6) * 24, zz = z + rnd() * 2;
+      if (riverBlocked(rivers, s * d, zz, 0.9) || arena(zz, d)) continue;
+      put(d < 8.5 ? wpick(th.near) : wpick(th.far), [s * d, zz, 0.75 + rnd() * 0.7, rnd() * 6.28]);
     }
   }
+  // landmarks further out
+  for (let z = -20; z < len - 10; z += 9 + rnd() * 8) {
+    const s = rnd() < 0.5 ? -1 : 1;
+    for (let tries = 0; tries < 3; tries++) {
+      const d = HALF + 13 + rnd() * 24;
+      if (riverBlocked(rivers, s * d, z, 4)) continue;
+      put(wpick(th.big), [s * d, z, 0.9 + rnd() * 0.5, rnd() * 6.28]);
+      break;
+    }
+  }
+  // small ground detail near the road
+  for (let z = -30; z < len - 20; z += 0.9) {
+    for (const s of [-1, 1]) {
+      if (rnd() < 0.3) continue;
+      const d = HALF + 1.5 + Math.pow(rnd(), 1.4) * 12, zz = z + rnd() * 0.9;
+      if (riverBlocked(rivers, s * d, zz, 0.3)) continue;
+      put(wpick(th.tiny), [s * d, zz, 0.7 + rnd() * 0.6, rnd() * 6.28]);
+    }
+  }
+  { const rv = buildRivers(th, rivers, -40, len + 20); addProp({ solid: null, glow: rv.glow }, 0, 0, 0); if (rv.lit) { const m = new THREE.Mesh(keep(rv.lit), MAT.decor); grp.add(m); } }
   for (let z = -30; z < len - 20; z += 2) { put(th.fence, [-(HALF + 0.95), z, 1, 0]); put(th.fence, [HALF + 0.95, z, 1, 0]); }
   for (let z = -20; z < len + 40; z += 14 + rnd() * 10) {
     const s = rnd() < 0.5 ? -1 : 1;
@@ -508,17 +545,23 @@ function buildLevel(L) {
   for (const type in decor) {
     const list = decor[type], geo = DECOR[type];
     const mat = type === 'cloud' ? MAT.cloud : geo.userData.glow ? MAT.glow : MAT.decor;
-    const im = new THREE.InstancedMesh(geo, mat, list.length);
-    list.forEach((d, i) => { q.setFromAxisAngle(up, d[3]); sc.setScalar(d[2]); v3.set(d[0], d[4] || 0, d[1]); m4.compose(v3, q, sc); im.setMatrixAt(i, m4); });
-    im.computeBoundingSphere();
-    grp.add(im); keep(im);
+    for (const [g2, m2] of [[geo, mat], [geo.userData.glowPart, MAT.glow]]) {
+      if (!g2) continue;
+      const im = new THREE.InstancedMesh(g2, m2, list.length);
+      list.forEach((d, i) => { q.setFromAxisAngle(up, d[3]); sc.setScalar(d[2]); v3.set(d[0], d[4] || 0, d[1]); m4.compose(v3, q, sc); im.setMatrixAt(i, m4); });
+      im.computeBoundingSphere();
+      grp.add(im); keep(im);
+    }
   }
 
   // gates
   const panelGeo = keep(new THREE.PlaneGeometry(4.75, 2.3));
-  const postGeo = keep(new THREE.CylinderGeometry(0.13, 0.13, 2.9, 10));
-  const capGeo = keep(new THREE.SphereGeometry(0.22, 12, 8));
-  const baseGeo = keep(new THREE.CylinderGeometry(0.26, 0.3, 0.22, 12));
+  const frame = gateFrame(th, HALF);
+  for (const [g2, m2] of [[keep(frame.solid), PMAT.solid], [keep(frame.glow), PMAT.glow]]) {
+    const im = new THREE.InstancedMesh(g2, m2, Math.max(1, spec.gates.length));
+    spec.gates.forEach((gs, i) => { m4.makeTranslation(0, 0, gs.z); im.setMatrixAt(i, m4); });
+    im.count = spec.gates.length; im.computeBoundingSphere(); grp.add(im); keep(im);
+  }
   for (const gs of spec.gates) {
     const g = new THREE.Group(); g.position.z = gs.z; grp.add(g);
     const panels = gs.defs.map((_, i) => {
@@ -528,11 +571,6 @@ function buildLevel(L) {
       g.add(p);
       return p;
     });
-    for (const px of [-HALF, 0, HALF]) {
-      const post = new THREE.Mesh(postGeo, MAT.post); post.position.set(px, 1.45, 0); g.add(post);
-      const cap = new THREE.Mesh(capGeo, MAT.post); cap.position.set(px, 2.95, 0); g.add(cap);
-      const base = new THREE.Mesh(baseGeo, MAT.postBase); base.position.set(px, 0.11, 0); g.add(base);
-    }
     LV.gates.push({ z: gs.z, defs: gs.defs, ops: null, g, panels, passed: false, t: 0, side: -1, armed: false });
   }
 
@@ -549,16 +587,12 @@ function buildLevel(L) {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(bs.x, h / 2, bs.z);
     grp.add(m);
-    if (isWall) {
-      const cap = new THREE.Mesh(keep(new THREE.BoxGeometry(w + 0.16, 0.16, d + 0.16)), MAT.stone); cap.position.y = h / 2 + 0.08; m.add(cap);
-    } else {
-      const bandG = keep(new THREE.BoxGeometry(w + 0.04, 0.12, d + 0.04));
-      for (const yy of [-0.5, 0.5]) { const band = new THREE.Mesh(bandG, MAT.postBase); band.position.y = yy; m.add(band); }
-    }
+    const lw = isWall ? Math.min(w * 0.9, 2.8) : 1.3, lh = isWall ? lw / 2 : 1.3;
+    if (isWall) addProp(wallDeco(th, w, h, d, lw), 0, 0, 0, m);
+    else m.add(new THREE.Mesh(keep(crateTrim(w, h, d)), PMAT.solid));
     const b = { ...bs, d, h, hp: 1, max: 1, alive: true, mesh: m, wob: 0, armed: false };
     b.label = new BlockLabel(b);
     keep(b.label.tex);
-    const lw = isWall ? Math.min(w * 0.9, 2.8) : 1.3, lh = isWall ? lw / 2 : 1.3;
     const lm = new THREE.Mesh(keep(new THREE.PlaneGeometry(lw, lh)), keep(new THREE.MeshBasicMaterial({ map: b.label.tex, transparent: true, fog: false })));
     lm.rotation.y = Math.PI; lm.position.set(0, isWall ? 0.05 : 0, -d / 2 - 0.02);
     lm.visible = false; b.labelMesh = lm;
@@ -567,9 +601,9 @@ function buildLevel(L) {
   }
 
   // saws
-  const slotGeo = keep(new THREE.PlaneGeometry(HALF * 2 - 0.6, 0.42)); slotGeo.rotateX(-Math.PI / 2);
+  const slotGeo = spec.saws.length ? keep(sawTrack(HALF * 2 - 0.6)) : null;
   for (const ss of spec.saws) {
-    const slotM = new THREE.Mesh(slotGeo, MAT.slot); slotM.position.set(0, 0.008, ss.z); grp.add(slotM);
+    const slotM = new THREE.Mesh(slotGeo, PMAT.solid); slotM.position.set(0, 0, ss.z); grp.add(slotM);
     for (const sx of [-1, 1]) { const pst = new THREE.Mesh(DECOR.sawPost, MAT.decor); pst.position.set(sx * (HALF + 0.35), 0, ss.z); grp.add(pst); }
     const blade = new THREE.Mesh(DECOR.saw, MAT.decor); blade.position.set(0, 0.5, ss.z); grp.add(blade);
     LV.saws.push({ ...ss, x: 0, blade });
@@ -590,7 +624,7 @@ function buildLevel(L) {
   // coins
   LV.coins = spec.coins.map((c) => ({ x: c.x, z: c.z, taken: false }));
   if (LV.coins.length) {
-    LV.coinMesh = new THREE.InstancedMesh(G.coin, MAT.coin, LV.coins.length);
+    LV.coinMesh = new THREE.InstancedMesh(coinGeo(), PMAT.coin, LV.coins.length);
     LV.coinMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     LV.coinMesh.frustumCulled = false;
     grp.add(LV.coinMesh); keep(LV.coinMesh);
@@ -683,7 +717,7 @@ function updateBoss(dt) {
   if (b.state === 'dead') {
     b.group.rotation.x = Math.min(1.5, b.group.rotation.x + dt * 2.2);
     b.group.position.y = -Math.max(0, b.t - 0.6) * 2;
-    if (b.t > 0.55 && !b.boomed) { b.boomed = true; S.shake = 1; sfx.play('slam'); burst(b.x, 1, b.z + 2, 0xd8343f, 40, 9, 2.2, 16, 9); }
+    if (b.t > 0.55 && !b.boomed) { b.boomed = true; S.shake = 1; sfx.play('slam'); pulse('bad'); burst(b.x, 1, b.z + 2, 0xd8343f, 40, 9, 2.2, 16, 9); }
     return;
   }
   const reach = 3.0 * b.s + 0.4;
@@ -820,6 +854,7 @@ function changeCount(newCount, good) {
   if (diff > 0) burst(squad.x, 1, squad.z, 0x8fd0ff, Math.min(24, 6 + diff), 4, 0.6, 6, 4);
   sfx.play(good ? 'good' : 'bad');
   vibrate(good ? 15 : 45);
+  if (Math.abs(diff) >= 10) pulse(good ? 'good' : 'bad');
 }
 
 function blockDestroyed(b, reward) {
@@ -834,7 +869,7 @@ function blockDestroyed(b, reward) {
       // new uniforms: everyone pops into the new look
       for (const s of squad.sold) s.k = 0.35;
     }
-    toast(WEAPONS[b.tier].name + '!');
+    weaponPopup(b.tier);
     sfx.play('upgrade');
     burst(squad.x, 1.2, squad.z, WEAPONS[b.tier].bullet, 24, 5, 0.6, 5, 5);
   } else if (b.kind === 'soldier') {
@@ -956,7 +991,7 @@ function updateObstacles(dt) {
       g.passed = true;
       g.side = squad.x < 0 ? 0 : 1;
       const op = g.ops[g.side];
-      toast(opText(op), !isGood(op));
+      floatText(opText(op), !isGood(op) ? 'bad' : '');
       changeCount(applyOp(op, S.count), isGood(op));
       if (S.state !== 'play') return;
     }
@@ -1329,6 +1364,8 @@ function lose() {
   save.coins += S.runCoins; persist();
   $('lCoins').textContent = S.runCoins;
   updateCoinsHud();
+  $('loseTip').textContent = loseTip();
+  pulse('bad');
   $('loseSub').textContent = LV.boss.state !== 'idle' ? LV.boss.name + ' çok güçlüydü!' : 'Ordun dağıldı!';
   $('bossBar').classList.add('hidden');
 }
@@ -1338,7 +1375,9 @@ function finishWin() {
   save.coins += reward; save.level = L + 1; persist();
   $('wSold').textContent = fmt(S.count);
   $('wColl').textContent = S.collected;
-  $('wCoins').textContent = reward;
+  showStars(S.count >= 30 ? 3 : S.count >= 10 ? 2 : 1);
+  countUp($('wCoins'), reward);
+  pulse('good');
   $('winSub').textContent = 'Seviye ' + L + ' tamamlandı' + (L % 10 === 0 ? ' · Yeni bölüm açıldı!' : '');
   $('winPanel').classList.remove('hidden');
   updateCoinsHud();
@@ -1481,14 +1520,91 @@ function toast(text, bad) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 950);
 }
 function vibrate(ms) { if (save.vibe && navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) { /* ignore */ } } }
-function updateCoinsHud() { $('coins').textContent = fmt(save.coins + (S.state === 'play' || S.state === 'boss' ? S.runCoins : 0)); }
+// CSS-only juice: floating text, full-screen pulse, counter bump
+function floatText(text, cls) {
+  const host = $('fx');
+  while (host.children.length > 4) host.removeChild(host.firstChild);
+  const el = document.createElement('div');
+  el.className = 'fl ' + (cls || '');
+  el.textContent = text;
+  el.style.marginLeft = ((Math.random() - 0.5) * 40).toFixed(0) + 'px';
+  el.addEventListener('animationend', () => el.remove());
+  host.appendChild(el);
+}
+function weaponPopup(tier) {
+  const w = WEAPONS[tier], el = $('wpn');
+  el.querySelector('b').textContent = w.name;
+  el.querySelector('.wi').innerHTML = '<svg viewBox="0 0 24 24"><path d="M2 9h13l2-2h4v4h-3v2h-5l-1 2h-3l-1 5H5l1-5H2z" fill="' + w.icon + '"/><circle cx="20.5" cy="9" r="1.6" fill="#' + w.bullet.toString(16).padStart(6, '0') + '"/></svg>';
+  el.classList.remove('go'); void el.offsetWidth; el.classList.add('go');
+}
+function pulse(kind) {
+  const el = $('pulse');
+  el.className = kind || '';
+  void el.offsetWidth; el.classList.add('go');
+}
+let shownCoins = -1;
+function updateCoinsHud() {
+  const v = save.coins + (S.state === 'play' || S.state === 'boss' ? S.runCoins : 0);
+  $('coins').textContent = fmt(v);
+  if (shownCoins >= 0 && v > shownCoins) {
+    const p = $('coins').parentNode;
+    p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump');
+  }
+  shownCoins = v;
+}
+function countUp(el, to) {
+  // short rAF count-up, only while the win panel is open
+  const t0 = performance.now(), dur = 900;
+  const tick = (now) => {
+    const k = Math.min(1, (now - t0) / dur);
+    el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3)));
+    if (k < 1 && !$('winPanel').classList.contains('hidden')) requestAnimationFrame(tick);
+    else el.textContent = to;
+  };
+  el.textContent = 0;
+  requestAnimationFrame(tick);
+}
+function showStars(n) {
+  document.querySelectorAll('#stars svg').forEach((el, i) => {
+    el.classList.remove('on', 'off'); void el.getBoundingClientRect();
+    el.style.setProperty('--d', (0.25 + i * 0.22) + 's');
+    el.classList.add(i < n ? 'on' : 'off');
+    if (i < n) setTimeout(() => sfx.play('coin'), 250 + i * 220);
+  });
+}
+function loseTip() {
+  const d = Object.assign({}, S.deaths); d[S.cause] = (d[S.cause] || 0) + 1;
+  const tips = {
+    gate: 'Kırmızı kapılardan kaçın, yeşil kapıları seç!',
+    wall: 'Duvarlara çarpma; önce ateşle kır!',
+    saw: 'Testerelerin etrafından dolan!',
+    shot: 'Düşman ateşinden kaçmak için kenara geç.',
+    enemy: 'Daha çok asker topla ve ateş gücünü yükselt!',
+    boss: 'Dev için güçlü silah kasalarını kır ve yükseltme al!',
+  };
+  let best = 'enemy', bv = -1;
+  for (const k in tips) if ((d[k] || 0) > bv) { bv = d[k] || 0; best = k; }
+  return 'İpucu: ' + tips[bv > 0 ? best : 'enemy'];
+}
 
 function refreshMenu() {
-  $('lvlPill').textContent = 'SEVİYE ' + save.level + ' · ' + themeFor(save.level).name;
+  const th = themeFor(save.level), idx = (save.level - 1) % 10;
+  $('lvlPill').textContent = 'SEVİYE ' + save.level + ' · ' + th.name;
+  $('wName').textContent = th.name;
+  $('wLv').textContent = 'SEVİYE ' + save.level;
+  const dots = $('dots');
+  if (dots.children.length !== 10) { dots.innerHTML = ''; for (let i = 0; i < 10; i++) dots.appendChild(document.createElement('i')); }
+  for (let i = 0; i < 10; i++) dots.children[i].className = (i < idx ? 'done' : i === idx ? 'cur' : '') + (i === 9 ? ' boss' : '');
   updateCoinsHud();
   document.querySelectorAll('.up').forEach((el) => {
     const k = el.dataset.up, lvl = save[k], maxed = lvl >= UPG[k].max, cost = upCost(k);
     el.querySelector('[data-v]').textContent = k === 'upStart' ? startSoldiers() : lvl + 1;
+    const nx = k === 'upStart' ? (startSoldiers() + 1) + ' asker' : k === 'upRate' ? 'x' + (1 + (lvl + 1) * 0.08).toFixed(2) : 'x' + (1 + (lvl + 1) * 0.1).toFixed(1);
+    el.querySelector('[data-n]').textContent = maxed ? 'MAKS' : nx;
+    const bars = el.querySelector('.lv');
+    if (bars.children.length !== 5) { bars.innerHTML = '<i></i><i></i><i></i><i></i><i></i>'; }
+    const fill = Math.ceil(5 * lvl / UPG[k].max);
+    for (let i = 0; i < 5; i++) bars.children[i].classList.toggle('on', i < fill);
     el.querySelector('[data-c]').textContent = maxed ? 'MAKS' : fmt(cost);
     el.classList.toggle('poor', !maxed && save.coins < cost);
     el.classList.toggle('max', maxed);
@@ -1514,7 +1630,24 @@ function startRun() {
   LV.lastProg = 0;
   updateCoinsHud();
   const L = LV.L;
-  toast(L > 1 && (L - 1) % 10 === 0 ? 'YENİ BÖLÜM: ' + LV.th.name : 'SEVİYE ' + L);
+  if (L > 1 && (L - 1) % 10 === 0) {
+    const sp = $('splash'); sp.querySelector('b').textContent = LV.th.name;
+    sp.classList.remove('go'); void sp.offsetWidth; sp.classList.add('go');
+    sfx.play('upgrade');
+  } else toast('SEVİYE ' + L);
+  showTutorial();
+}
+
+function showTutorial() {
+  let seen = false;
+  try { seen = !!localStorage.getItem('ordu_tut_v1'); localStorage.setItem('ordu_tut_v1', '1'); } catch (e) { /* ignore */ }
+  const old = $('tutorial'); if (old) old.remove();
+  if (seen) return;
+  const t = document.createElement('div');
+  t.id = 'tutorial';
+  t.innerHTML = '<div>Orduyu yönlendirmek için sağa sola kaydır</div><div>Silah kasalarını ateşle kır, yeşil kapıları seç!</div>';
+  t.addEventListener('animationend', (e) => { if (e.animationName === 'tutOut') t.remove(); });
+  document.querySelector('.ui').appendChild(t);
 }
 
 document.querySelectorAll('.up').forEach((el) => el.addEventListener('click', (e) => {
@@ -1528,6 +1661,7 @@ document.querySelectorAll('.up').forEach((el) => el.addEventListener('click', (e
   sfx.play('upgrade'); vibrate(20);
   if (k === 'upStart') { S.count = startSoldiers(); syncSquad(false); burst(0, 1, 0, 0x8fd0ff, 14, 4, 0.6, 6, 4); }
   refreshMenu();
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
 }));
 
 function syncToggles() {
@@ -1538,6 +1672,7 @@ document.querySelectorAll('.tog').forEach((t) => t.addEventListener('click', () 
   save[k] = !save[k]; persist();
   if (k === 'sound') { sfx.enabled = save.sound; if (save.sound) sfx.unlock(); }
   if (k === 'eco') onResize();
+  if (k === 'sound' && S.paused) sfx.stopMusic();
   sfx.play('click');
   syncToggles();
 }));
@@ -1546,13 +1681,16 @@ $('btnGear').addEventListener('click', (e) => {
   sfx.unlock();
   syncToggles();
   $('btnHome').classList.toggle('hidden', S.state === 'menu');
+  $('setTitle').textContent = S.state === 'play' || S.state === 'boss' ? 'DURAKLATILDI' : 'AYARLAR';
+  sfx.stopMusic();
   $('settings').classList.remove('hidden');
   S.paused = true;
 });
-$('btnCloseSet').addEventListener('click', () => { $('settings').classList.add('hidden'); S.paused = false; lastT = performance.now(); });
+$('btnCloseSet').addEventListener('click', () => { $('settings').classList.add('hidden'); S.paused = false; lastT = performance.now(); if (save.sound) sfx.startMusic(); });
 $('btnHome').addEventListener('click', () => {
   if (S.state === 'play' || S.state === 'boss') { save.coins += S.runCoins; persist(); }
   showMenu();
+  if (save.sound) sfx.startMusic();
 });
 $('btnNext').addEventListener('click', () => { sfx.play('click'); showMenu(); });
 $('btnRetry').addEventListener('click', () => { sfx.play('click'); showMenu(); });
