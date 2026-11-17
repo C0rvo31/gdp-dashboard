@@ -510,6 +510,40 @@ export const ENEMY_MODELS = {
       hood(0.178, 0, 0.955, -0.02, camo, 0.85, 12, 7, 1.06, 0.6), torus(0.15, 0.03, 0, 0.955, 0.06, dark, 0, 0, 4, 12),
       ...tufts.map(([x, y, z, rz], i) => cone(0.04, 0.13, x, y, z, i % 2 ? dark : 0x6aa03a, -0.3, rz, 3))];
   },
+  robot() { // factory robot: boxy purple chassis, orange eye slits, circular saw raised, claw hand
+    const body = 0x7a3fc0, grey = 0x8a90a8, greyD = 0x4a5068, dark = 0x23262e, orng = 0xff7a1a, steel = 0xd0d6e2, h = RAISE;
+    const hand = [-0.18, 0.64, 0.21];
+    return [box(0.38, 0.3, 0.27, 0, 0.7, 0, body), box(0.3, 0.17, 0.22, 0, 0.51, 0, greyD), box(0.32, 0.05, 0.24, 0, 0.43, 0, dark),
+      box(0.22, 0.14, 0.03, 0, 0.7, 0.14, grey), glow(box(0.07, 0.07, 0.02, 0, 0.7, 0.158, orng, 0, 0, Math.PI / 4), 1.5),
+      box(0.3, 0.035, 0.03, 0, 0.84, 0.135, 0xffc83a, 0, 0, 0), box(0.04, 0.12, 0.03, -0.14, 0.58, 0.12, 0xffc83a, 0, 0, 0.5), box(0.04, 0.12, 0.03, 0.14, 0.58, 0.12, 0xffc83a, 0, 0, -0.5),
+      box(0.12, 0.14, 0.1, 0, 0.62, -0.16, greyD), cyl(0.03, 0.03, 0.12, -0.08, 0.76, -0.17, grey, 6), cyl(0.03, 0.03, 0.12, 0.08, 0.76, -0.17, grey, 6),
+      ...pad(-0.22, grey, 0.095), ...pad(0.22, grey, 0.095), cyl(0.05, 0.06, 0.07, 0, 0.87, 0, dark, 6),
+      ...armsMelee({ sleeve: grey, fore: greyD, glove: orng, cuff: dark, elbow: dark, padded: true, r: 0.05, hr: 0.05 }),
+      rod([h[0], h[1] - 0.02, h[2]], [h[0], h[1] + 0.2, h[2] + 0.09], 0.02, 0.02, dark, 6),
+      cyl(0.2, 0.2, 0.018, h[0], h[1] + 0.22, h[2] + 0.1, 0xaab2c2, 7, Math.PI / 2), cyl(0.165, 0.165, 0.03, h[0], h[1] + 0.22, h[2] + 0.1, steel, 12, Math.PI / 2),
+      glow(cyl(0.05, 0.05, 0.036, h[0], h[1] + 0.22, h[2] + 0.1, orng, 8, Math.PI / 2), 1.5),
+      box(0.025, 0.07, 0.05, hand[0] - 0.045, hand[1], hand[2] + 0.07, orng, 0, 0, 0.3), box(0.025, 0.07, 0.05, hand[0] + 0.045, hand[1], hand[2] + 0.07, orng, 0, 0, -0.3),
+      box(0.025, 0.03, 0.08, hand[0], hand[1] + 0.045, hand[2] + 0.07, orng),
+      box(0.25, 0.19, 0.22, 0, 0.99, 0, grey), box(0.27, 0.05, 0.24, 0, 1.1, 0, body), box(0.22, 0.07, 0.03, 0, 0.99, 0.112, dark),
+      glow(box(0.07, 0.035, 0.02, -0.055, 0.99, 0.128, orng), 1.7), glow(box(0.07, 0.035, 0.02, 0.055, 0.99, 0.128, orng), 1.7),
+      box(0.14, 0.04, 0.03, 0, 0.9, 0.112, dark), box(0.025, 0.05, 0.03, -0.04, 0.9, 0.118, steel), box(0.025, 0.05, 0.03, 0.04, 0.9, 0.118, steel),
+      cyl(0.035, 0.035, 0.1, -0.14, 0.99, 0, greyD, 6, 0, Math.PI / 2), cyl(0.035, 0.035, 0.1, 0.14, 0.99, 0, greyD, 6, 0, Math.PI / 2),
+      rod([0.07, 1.12, -0.04], [0.09, 1.28, -0.04], 0.012, 0.012, dark, 4), glow(ball(0.028, 0.09, 1.29, -0.04, 0xff3a3a, 5, 4), 1.4)];
+  },
+  droid() { // slim android gunner: chrome head, magenta visor, laser rifle with glowing barrel
+    const body = 0x4a4f66, greyL = 0xc2c6d6, dark = 0x23262e, purp = 0x7a4ac8, mag = 0xff3df2, X = 0.07, Y = 0.735;
+    return [torso(body, 0.82, 0.72, 0x2a2e3a), box(0.2, 0.18, 0.03, 0, 0.68, 0.112, greyL), glow(box(0.14, 0.022, 0.014, 0, 0.7, 0.13, mag), 1.6), glow(box(0.1, 0.022, 0.014, 0, 0.65, 0.13, mag), 1.6),
+      ...belt(dark, purp, 0.135), ...pad(-0.15, purp, 0.075), ...pad(0.15, purp, 0.075), box(0.1, 0.12, 0.08, 0, 0.7, -0.12, 0x3a3f52), cyl(0.012, 0.012, 0.3, 0.05, 0.95, -0.13, dark, 4),
+      ...aimArms(body, dark, purp, GRIP[1]),
+      box(0.05, 0.095, 0.18, X, Y - 0.025, 0.09, purp, 0.12), box(0.058, 0.074, 0.24, X, Y, 0.29, 0x3a3f52), box(0.056, 0.058, 0.16, X, Y - 0.006, 0.5, greyL),
+      rod([X, Y + 0.008, 0.58], [X, Y + 0.008, 0.76], 0.018, 0.014, dark, 6), glow(rod([X, Y + 0.034, 0.3], [X, Y + 0.034, 0.7], 0.01, 0.01, mag, 4), 1.6),
+      glow(box(0.04, 0.05, 0.08, X, Y - 0.065, 0.3, mag), 1.5), glow(box(0.014, 0.03, 0.014, X, Y + 0.035, 0.76, mag), 1.6),
+      box(0.034, 0.06, 0.04, X, Y - 0.065, 0.22, dark, -0.25),
+      ball(0.128, 0, 0.965, 0, greyL, 12, 9, 0.95, 1.05, 1.0), box(0.2, 0.075, 0.05, 0, 0.97, 0.095, dark), glow(box(0.17, 0.038, 0.02, 0, 0.97, 0.124, mag), 1.8),
+      cyl(0.045, 0.045, 0.06, -0.125, 0.965, 0, purp, 7, 0, Math.PI / 2), cyl(0.045, 0.045, 0.06, 0.125, 0.965, 0, purp, 7, 0, Math.PI / 2),
+      box(0.03, 0.09, 0.17, 0, 1.1, -0.02, purp), cyl(0.04, 0.05, 0.05, 0, 0.87, 0, dark, 6),
+      rod([-0.1, 1.04, -0.02], [-0.16, 1.2, -0.04], 0.01, 0.01, greyL, 4), glow(ball(0.022, -0.16, 1.21, -0.04, mag, 5, 4), 1.6)];
+  },
   demon() { // horned demon casting with a fire staff held forward
     const c = 0x8a1c1c, skin = 0xc0392b, horn = 0x1a1416, fire = 0xff7a1a;
     const top = [0.07, 1.06, 0.6];
@@ -531,6 +565,7 @@ export const ENEMY_LEGS = {
   raider: [0x4a1d29, 0x2b1d18, 0x3a2228], gunner: [0x2b2f3a, 0x1d1a18], nomad: [0xc9a06a, 0x6b4426], bandit: [0x3d5a80, 0x6b4426],
   knight: [0x6a7385, 0xb8c4d6, 0xffc83a, 'armor'], frost: [0xc7d3e0, 0x5a4a3a, 0x9fb4c8], skeleton: [0xefe8d8, 0x3a3236, undefined, 'bone'], demon: [0x2a1416, 0x120c0e],
   tribal: [0xa8683a, 0x6b4426, 0xff8a1a, 'bare'], blowgun: [0x4a5a2a, 0x3a2a1a, 0x2f4a1c],
+  robot: [0x6a7088, 0x7a3fc0, 0xff7a1a, 'armor'], droid: [0x2a2e3a, 0x5a4a88, 0xff3df2],
 };
 export const buildEnemy = (type) => mirrorX(merge(ENEMY_MODELS[type]()));
 export const buildEnemyLeg = (type) => { const l = ENEMY_LEGS[type]; return buildLeg(l[0], l[1], l[2], l[3]); };

@@ -29,6 +29,8 @@ const STYLE = {
   jungle: { post: 0xe8dcc0, stripe: 0x3fa848, beam: 0x3a2a1a, light: 0xc8ff5a, light2: 0xfff2a0, cap: 0x8a9a78, pillar: 0x6f7f5c, top: 'grass',
     banner: 0x2f8a3a, banner2: 0xffc83a, pole: 0x6a4a2e, stone: 0x9aa08a, stone2: 0x7f8a74, floor: 0x8a9a6a, flame: [0xff8a2a, 0xffe07a] },
 };
+STYLE.factory = { post: 0x8a90a8, stripe: 0xffc83a, beam: 0x23262e, light: 0xff3df2, light2: 0x6ff7ff, cap: 0x8a90aa, pillar: 0x4a5068, top: 'hazard',
+    banner: 0x7a3fc0, banner2: 0xffc83a, pole: 0x3c4458, stone: 0x555b72, stone2: 0x3c4458, floor: 0x3a3f52, flame: [0xff7a1a, 0x6ff7ff] };
 const st = (th) => (th && STYLE[th.key]) || STYLE.meadow;
 
 // ------------------------------------------------------------ gates
@@ -69,6 +71,7 @@ export function wallDeco(th, w, h, d, labelW) {
     if (S.top === 'grass') solid.push(F(new THREE.ConeGeometry(0.28, 0.32, 4).rotateY(Math.PI / 4).translate(px, top + 0.62, 0.06), 0xc94a3a));
     else if (S.top === 'crenel') solid.push(box(0.3, 0.3, 0.3, px, top + 0.61, 0.06, S.cap));
     else if (S.top === 'snow') solid.push(F(new THREE.IcosahedronGeometry(0.22, 1).scale(1.1, 0.7, 1.1).translate(px, top + 0.55, 0.06), 0xffffff));
+    else if (S.top === 'hazard') { solid.push(box(0.3, 0.3, 0.3, px, top + 0.61, 0.06, 0x23262e)); glow.push(F(new THREE.IcosahedronGeometry(0.1, 0).translate(px, top + 0.84, 0.06), 0xff3a3a)); }
     else { solid.push(F(new THREE.ConeGeometry(0.13, 0.5, 6).translate(px, top + 0.71, 0.06), 0x5a5058)); glow.push(F(new THREE.IcosahedronGeometry(0.1, 0).translate(px, top + 0.5, -d / 2 - 0.02), 0xff7a1a)); }
   }
   const span = w - 0.7;
@@ -83,6 +86,10 @@ export function wallDeco(th, w, h, d, labelW) {
   } else if (S.top === 'crenel') {
     solid.push(box(span, 0.12, d + 0.14, 0, top + 0.06, 0, S.cap));
     for (let x = -span / 2 + 0.3; x < span / 2 - 0.2; x += 0.85) solid.push(box(0.46, 0.36, d + 0.04, x, top + 0.3, 0.02, 0xe6c58e));
+  } else if (S.top === 'hazard') {
+    solid.push(box(span, 0.14, d + 0.14, 0, top + 0.07, 0, S.cap));
+    for (let x = -span / 2 + 0.2; x < span / 2 - 0.1; x += 0.5) solid.push(box(0.24, 0.05, d + 0.16, x, top + 0.15, 0, 0xffc83a, 0, 0.45));
+    glow.push(box(span, 0.04, 0.05, 0, top + 0.01, -d / 2 - 0.08, 0x6ff7ff));
   } else if (S.top === 'snow') {
     solid.push(box(span, 0.16, d + 0.18, 0, top + 0.08, 0, 0xffffff));
     for (let x = -span / 2 + 0.3; x < span / 2 - 0.2; x += 0.7) solid.push(F(new THREE.SphereGeometry(0.28, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(1.3, 0.55, 1.2).translate(x, top + 0.15, 0), 0xf6faff));

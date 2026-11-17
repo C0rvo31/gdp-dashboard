@@ -24,7 +24,7 @@ const { chromium } = require('playwright');
     await p.waitForTimeout(350);
     await p.screenshot({ path: `${OUT}/t${w}.png` });
   }
-  const types = [['raider', 1], ['gunner', 2], ['nomad', 11], ['bandit', 12], ['knight', 21], ['frost', 22], ['skeleton', 31], ['demon', 32], ['tribal', 41], ['blowgun', 42]];
+  const types = [['raider', 1], ['gunner', 2], ['nomad', 11], ['bandit', 12], ['knight', 21], ['frost', 22], ['skeleton', 31], ['demon', 32], ['tribal', 41], ['blowgun', 42], ['robot', 51], ['droid', 52]];
   for (const [type, L] of types) {
     const ok = await p.evaluate(({ type, L }) => {
       const G = window.__G; let e = null;
