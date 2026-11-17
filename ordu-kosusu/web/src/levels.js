@@ -42,8 +42,8 @@ export function makeOp(d, n) {
     return { k: 'add', v: nice(Math.max(3, n * (0.4 + d.r * 0.6) * damp + 2 + d.r2 * 4)) };
   }
   const h = d.h || 0;
-  if (n < 4 || (d.mul && n > 6)) return { k: 'div', v: n > 12 && d.r2 < 0.3 + h * 0.4 ? 3 : 2 };
-  return { k: 'sub', v: Math.max(1, Math.min(Math.floor(n * (0.6 + h * 0.15)), nice(Math.max(2, n * (0.25 + d.r * 0.3 + h * 0.2))))) };
+  if (n < 4 || (d.mul && n > 6)) return { k: 'div', v: !d.soft && n > 12 && d.r2 < 0.1 + h * 0.4 ? 3 : 2 };
+  return { k: 'sub', v: Math.max(1, Math.min(Math.floor(n * (d.soft ? 0.4 : 0.5 + h * 0.15)), nice(Math.max(2, n * (0.22 + d.r * 0.26 + h * 0.2))))) };
 }
 
 // ---------- per-world flavour: share of shooters, enemy group size, which traps it likes
@@ -73,32 +73,33 @@ export function genLevel(L) {
   const diff = Math.min(HEAT[local] + [0, 1.5, 3, 4.5, 5.3][Math.min(world, 4)], 15.5);
   const spec = { th, gates: [], blocks: [], enemies: [], saws: [], coins: [], hammers: [], spikes: [], rollers: [], drops: [], muds: [], patterns: [] };
   const has = (m) => L >= UNLOCK[m];
-  const harsh = clamp((diff - 3) / 12, 0, 0.75);   // bad gates bite harder later, but one misread is never fatal on its own
+  const harsh = clamp((diff - 3) / 12, 0, 0.55);   // bad gates bite harder later, but one misread is never fatal on its own
 
   // ---------------------------------------------------------- pieces
   const coinLine = (z, x, n = 7, curve = R(-1.5, 1.5)) => {
     for (let k = 0; k < n; k++) spec.coins.push({ x: clamp(x + Math.sin(k * 0.6) * curve, -4, 4), z: z + k * 1.1 });
   };
   const gdef = (good, extra) => ({ good, mul: chance(0.4), r: rnd(), r2: rnd(), h: harsh, ...extra });
-  const gate = (z, mode) => {
+  const gate = (z, mode, soft) => {
     let defs;
     if (mode === 'good') defs = [gdef(true), gdef(true)];
     else if (mode === 'bad') defs = [gdef(false, { mul: chance(0.3 + harsh * 0.4) }), gdef(false)]; // pick the lesser evil
-    else defs = [gdef(true), gdef(false, { mul: chance(0.35 + harsh * 0.3) })];
+    else defs = [gdef(true), gdef(false, { mul: chance(0.2 + harsh * 0.25), soft: soft ?? true })];   // a misread costs soldiers, never the run
     if (chance(0.5)) defs.reverse();
     spec.gates.push({ z, defs });
     return defs;
   };
-  const shooterChance = L < 2 ? 0 : Math.min(0.62, W.shooter + local * 0.02 + world * 0.02);
+  const shooterChance = L < 3 ? 0 : Math.min(0.62, W.shooter + local * 0.02 + world * 0.02);
   const enemy = (z, o = {}) => {
     const type = o.type || (chance(o.shoot ?? shooterChance) ? th.shooter : th.melee);
     const f = R(0.75, 1.3) * (1 + Math.min(L, 40) * 0.008) * W.f * (0.92 + diff * 0.008) * (o.f || 1);
-    const early = z < 140 ? 0.72 : z < 230 ? 0.86 : 1;   // the army is still tiny in the opening stretch
+    const early = z < 140 ? 0.72 : z < 230 ? 0.86 : z < 330 ? 0.94 : 1;   // the army is still tiny in the opening stretch
     spec.enemies.push({ z, xr: o.xr ?? R(-1, 1), f: f * early, type });
   };
   const wall = (x, z, w, tf = R(1.0, 2.4)) => spec.blocks.push({ kind: 'wall', x, z, w, tf });
   const crate = (kind, x, z) => spec.blocks.push({ kind, x, z, w: 1.5, tf: R(0.7, 1.25), vf: R(0.3, 0.5) });
-  const saw = (z, o = {}) => spec.saws.push({ z, amp: o.amp ?? 3.4, cx: o.cx || 0, speed: R(0.9, 1.4) + Math.min(L, 15) * 0.025, ph: o.ph ?? R(0, 6.28) });
+  // a saw never sweeps the whole road: it is shifted to one side so the other edge (>= 1.75 clear for the widest army) is always safe
+  const saw = (z, o = {}) => spec.saws.push({ z, amp: o.amp ?? 2.2, cx: o.cx ?? (chance(0.5) ? -1.6 : 1.6), speed: R(0.9, 1.4) + Math.min(L, 15) * 0.025, ph: o.ph ?? R(0, 6.28) });
   const hammer = (z, o = {}) => spec.hammers.push({ z, cx: o.cx || 0, amp: o.amp ?? R(0.55, 0.66), speed: (o.speed ?? R(1.5, 1.9)) + Math.min(diff, 12) * 0.04, ph: o.ph ?? R(0, 6.28) });
   // spike strip: tiles are 3.2 wide lanes (x = -3.33 / 0 / 3.33); phases are spread so one lane is always safe
   const spikes = (z, o = {}) => {
@@ -114,6 +115,9 @@ export function genLevel(L) {
   const drop = (z, o = {}) => spec.drops.push({ z, dx: o.dx ?? R(-1.3, 1.3), warn: o.warn ?? Math.max(0.95, 1.2 - diff * 0.012), r: 1.15 });
   // mud strip: lanes of sticky mud that halve the army's speed (longer under fire)
   const mud = (z, lanes, depth = 6) => spec.muds.push({ z, depth, tiles: lanes.map((x) => ({ x })) });
+  // a crate (1.5 wide, straight fire) right after something that forces a lane (gate, wall, trap) goes in the middle: reachable from either side
+  let prevK = null;
+  const crateX = (set) => (GATEY[prevK] || TRAPPY[prevK] || WALLY[prevK] ? 0 : pick(set));
   const lane = () => pick([-3.3, -1.65, 0, 1.65, 3.3]);
   const trapW = (m) => (has(m) ? W.traps[m] || 0 : 0);
   const pickTrap = (exclude) => {
@@ -151,7 +155,7 @@ export function genLevel(L) {
     gate: { min: 1, heat: 0, w: 3, build: (z) => { gate(z, chance(0.25 - harsh * 0.15) ? 'good' : 'choice'); if (chance(0.6)) coinLine(z + 7, R(-3, 3)); return z + R(22, 26); } },
     fight: { min: 1, heat: 0, w: 2.2, build: (z) => { enemy(z + 4); if (chance(0.5)) coinLine(z - 8, R(-3, 3)); return z + R(26, 30); } },
     // gate right before an enemy group: the choice decides the fight
-    gateFight: { min: 2, heat: 0.5, w: 2.2, build: (z) => { gate(z, 'choice'); enemy(z + 15, { f: TRAPPY[prevK] ? 0.9 : 1.12 }); return z + 15 + R(25, 28); } },
+    gateFight: { min: 2, heat: 0.5, w: 2.2, build: (z) => { gate(z, 'choice', true); enemy(z + 15, { f: TRAPPY[prevK] ? 0.9 : 1.0 }); return z + 15 + R(25, 28); } },
     // wall corridor with a weapon crate waiting behind it
     armory: { min: 3, heat: 1, w: 1.0, build: (z) => {
       const tf = R(1.2, 2.0);
@@ -175,14 +179,14 @@ export function genLevel(L) {
     } },
     crates: { min: 2, heat: 0, w: 1.0, build: (z) => {
       if (L >= 4 && chance(0.5)) { const s = chance(0.5) ? -1 : 1; crate('weapon', s * 2.6, z); crate('soldier', -s * 2.6, z); }
-      else crate('soldier', pick([-2.6, 0, 2.6]), z);
+      else crate('soldier', crateX([-2.6, 0, 2.6]), z);
       return z + R(22, 26);
     } },
     // two or three saws in a row with a coin trail weaving through
     sawGauntlet: { min: 5, heat: 2, w: 1.0, tw: 'saw', build: (z) => {
       const ph = R(0, 6.28);
-      for (let j = 0; j < 2; j++) saw(z + j * 9, { ph: ph + j * 2.1 });
-      for (let j = 0; j < 2; j++) coinLine(z - 2 + j * 9, j % 2 ? 3.2 : -3.2, 4, 0);
+      const s0 = chance(0.5) ? -1 : 1;
+      for (let j = 0; j < 2; j++) { saw(z + j * 9, { ph: ph + j * 2.1, cx: (j % 2 ? -s0 : s0) * 1.6 }); coinLine(z - 2 + j * 9, (j % 2 ? s0 : -s0) * 3.2, 4, 0); }
       return z + 31;
     } },
     // tempting big gate, but the hazard sits right on its side of the road
@@ -223,7 +227,7 @@ export function genLevel(L) {
     } },
     // soldiers + an ambush: melee charge with gunners right behind
     ambush: { min: 5, heat: 4, pos: 0.3, w: 1.0, build: (z) => {
-      crate('soldier', pick([-2.6, 2.6]), z);
+      crate('soldier', crateX([-2.6, 2.6]), z);
       enemy(z + 18, { type: th.melee, f: 0.8 }); enemy(z + 27, { type: th.shooter, f: 0.75 });
       return z + 27 + R(26, 29);
     } },
@@ -237,13 +241,13 @@ export function genLevel(L) {
     trapFight: { min: 6, heat: 3, w: 1.0, build: (z) => {
       const m = pickTrap('roller') || 'saw';
       z += trapPiece(m, z, true) - 4;
-      enemy(z + 4, { f: 0.8 }); return z + R(27, 30);   // sized before the trap: keep it fair
+      enemy(z + 6, { f: 0.8, xr: R(-0.5, 0.5) }); return z + 2 + R(27, 30);   // sized before the trap: keep it fair
     } },
   };
 
   // ---------------------------------------------------------- plan
   const segs = Math.round(7 + Math.min(diff, 12) * 0.95);
-  const plan = ['gate:good', 'crate:weapon', 'gate'];
+  const plan = ['gate:good', 'crate:weapon', L > 3 ? 'gate:good' : 'gate'];   // a tiny opening army must not be decided by a misread
   if (local >= 2 || world > 0) plan.push('fight'); else plan.push('gate');
   // newly unlocked mechanic: a gentle solo introduction early in the level
   const fresh = ['hammer', 'spikes', 'roller', 'coconut'].find((m) => L === UNLOCK[m] || L === UNLOCK[m] + 1);
@@ -255,13 +259,14 @@ export function genLevel(L) {
   const used = {};
   const GATEY = { gate: 1, gateFight: 1, tempt: 1 };
   const WALLY = { wall: 1, armory: 1, breach: 1 };
+  const FOES = { fight: 1, gateFight: 1, ambush: 1, trapFight: 1, mudAmbush: 1 };
   const TRAPPY = { sawGauntlet: 1, hammerRow: 1, spikeField: 1, rollerAlley: 1, coconutGrove: 1, mudAmbush: 1, gauntlet: 1, trapFight: 1, tempt: 1 };
   const wantTraps = L < UNLOCK.hammer ? 0 : Math.min(5, 1 + Math.floor(diff / 3));
   let traps = 0;
   while (plan.length < fill) {
     const i = plan.length;
     if (i === Math.floor(fill * 0.5) || (L >= 3 && i === Math.floor(fill * 0.8))) { plan.push('crate:weapon'); last = 'crate'; continue; }
-    const needGate = !plan.slice(-3).some((q) => GATEY[q.split(':')[0]]);
+    const needGate = !plan.slice(-2).some((q) => GATEY[q.split(':')[0]]);
     const opts = [];
     let tot = 0;
     for (const k in PATTERNS) {
@@ -273,6 +278,7 @@ export function genLevel(L) {
       if (p.tw && trapW(p.tw) === 0) continue;
       if (TRAPPY[k] && (TRAPPY[last] || prevTrap(last))) continue;   // a breather between trap sections
       if (WALLY[k] && WALLY[last]) continue;
+      if (FOES[k] && FOES[last]) continue;                           // never two enemy groups back to back: the army needs a gate to recover
       if (p.pos && i / fill < p.pos) continue;                       // heavy pieces wait until the army has grown
       if (needGate && !GATEY[k]) continue;                           // economy: a gate at least every 3 segments                          // ...and between wall sections
       // running short on traps for this level's quota: only trap patterns qualify
@@ -293,15 +299,15 @@ export function genLevel(L) {
   else if (local === 4 && L > 10) plan.push('gate', 'ambushEnd');
   else plan.push('gateFight');
 
-  let z = 26, prevK = null;
+  let z = 26;
   for (const p of plan) {
     const [k, arg] = p.split(':');
     spec.patterns.push(p);
     if (k === 'gate' && arg) { gate(z, arg); z += R(22, 26); }
-    else if (k === 'crate') { crate(arg, pick([-2.6, 0, 2.6]), z); if (chance(0.5)) coinLine(z - 10, R(-3, 3)); z += R(22, 26); }
+    else if (k === 'crate') { crate(arg, crateX([-2.6, 0, 2.6]), z); if (chance(0.5)) coinLine(z - 10, R(-3, 3)); z += R(22, 26); }
     else if (k === 'intro') { z += trapPiece(arg, z, true); coinLine(z - 12, R(-3, 3), 5); }
     else if (k === 'showdown') {
-      crate('soldier', pick([-2.6, 2.6]), z); z += 18;
+      crate('soldier', crateX([-2.6, 2.6]), z); z += 18;
       enemy(z, { type: th.melee, f: 1.05, xr: 0 }); enemy(z + 10, { type: th.shooter, f: 0.7 });
       z += 10 + R(28, 30);
     } else if (k === 'ambushEnd') { enemy(z + 4, { type: th.melee, f: 0.9 }); enemy(z + 13, { type: th.shooter, f: 0.7 }); z += 13 + R(27, 30); }

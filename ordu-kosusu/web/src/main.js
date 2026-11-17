@@ -735,7 +735,7 @@ function armObjects() {
   for (const g of LV.enemies) {
     if (g.armed || g.z > squad.z + ENEMY_ARM) continue;
     g.armed = true;
-    g.count = Math.max(3, Math.min(600, Math.round(S.count * Math.min(g.f, 1.25) * (g.T.shoots ? 0.7 : 1))));
+    g.count = Math.max(3, Math.min(g.cap || 600, Math.round(S.count * Math.min(g.f, 1.25) * (g.T.shoots ? 0.7 : 1))));
     // one enemy takes about 1.5 s (x type toughness) of a single soldier's fire
     g.hp = Math.max(0.05, Math.sqrt(g.T.hp) * LV.hpMul * refPS(g.z) * 1.1); // hp 0 -> pool NaN
     const dE = dims(g.count);
@@ -1086,6 +1086,8 @@ function updateObstacles(dt) {
       const op = g.ops[g.side];
       floatText(opText(op), !isGood(op) ? 'bad' : '');
       changeCount(applyOp(op, S.count), isGood(op));
+      // a bad pick before a fight must not be fatal: groups sized before the gate shrink to the new army (never grow)
+      for (const e of LV.enemies) if (e.armed && e.alive && e.state !== 'fight' && e.z - squad.z < 30 && !isGood(op)) { e.cap = e.count; e.armed = false; e.sold.length = 0; }
       if (S.state !== 'play') return;
     }
     if (g.passed && g.t < 1) {

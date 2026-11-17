@@ -62,6 +62,8 @@ const SIM = (opts) => {
       if (!opts.human || Math.round(t * 60) % 12 === 0) q.tx = tx;  // a human re-steers ~5x per second
       if (opts.trace && Math.round(t * 60) % 6 === 0 && (haz.length || walls.length)) out.push(`  t=${t.toFixed(1)} z=${q.z.toFixed(1)} x=${q.x.toFixed(2)} tx=${tx.toFixed(2)} n=${S.count} sc=${bs.toFixed(2)} ${JSON.stringify(S.deaths)}`);
       G.step(1 / 60); t += 1 / 60;
+      if (opts.trace) { for (const g of LV.gates) if (g.passed && !g.__seen) { g.__seen = 1; out.push(`  GATE z=${g.z.toFixed(0)} ${g.ops ? g.ops.map((o) => o.k + o.v).join('/') : '?'} -> n=${S.count}`); }
+        for (const b of LV.blocks) if (!b.alive && !b.__seen) { b.__seen = 1; out.push(`  BLOCK ${b.kind} z=${b.z.toFixed(0)} x=${b.x.toFixed(1)} -> n=${S.count}`); } }
       if (opts.trace && S.fight && !S.fight.__seen) { S.fight.__seen = 1; out.push(`  FIGHT z=${q.z.toFixed(0)} ${S.fight.type} enemy=${S.fight.count} us=${S.count}`); }
       if (S.state === 'boss' && bossT === null) bossT = { t, count: S.count, w: S.weapon };
       if (opts.trace && S.state === "boss" && Math.round(t * 60) % 60 === 0) out.push(`  BOSS t=${t.toFixed(0)} n=${S.count} hp=${Math.round(LV.boss.hp)} bx=${LV.boss.x.toFixed(1)} qx=${q.x.toFixed(1)} st=${LV.boss.state}`);
@@ -82,7 +84,7 @@ const SIM = (opts) => {
   console.log('--- smart bot, no upgrades'); console.log(await p.evaluate(SIM, { levels: lv, up: +(process.env.UP || 0), plan: !!process.env.PLAN, trace: !!process.env.TRACE }));
   console.log('--- smart bot, upgrades 4'); console.log(await p.evaluate(SIM, { levels: lv.filter((l,i)=>i%2==0), up: 4 }));
   const dl = (process.env.DUMB_LEVELS || '1,2,3,5,8,12,15,22,25,30,35,40').split(',').map(Number);
-  if (process.env.HUMAN) { const hl = process.env.HUMAN.split(',').map(Number); for (let k = 0; k < +(process.env.RUNS || 1); k++) { console.log('--- human-ish bot (late reactions, 15% gate mistakes), no upgrades'); console.log(await p.evaluate(SIM, { levels: hl, up: 0, human: true })); } }
+  if (process.env.HUMAN) { const hl = process.env.HUMAN.split(',').map(Number); for (let k = 0; k < +(process.env.RUNS || 1); k++) { console.log('--- human-ish bot (late reactions, 15% gate mistakes), no upgrades'); console.log(await p.evaluate(SIM, { levels: hl, up: 0, human: true, trace: !!process.env.TRACEH, plan: !!process.env.PLAN })); } }
   console.log('--- random-gate bot, no upgrades'); console.log(await p.evaluate(SIM, { levels: dl, up: 0, dumb: true }));
   await b.close();
 })();
