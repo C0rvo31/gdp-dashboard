@@ -22,6 +22,7 @@ const SIM = (opts) => {
         if (opts.human && gate.pick === undefined) gate.pick = Math.random() < 0.15 ? a < b : a >= b;  // misreads 15% of gates
         tx = (opts.dumb || opts.human ? gate.pick : a >= b) ? -2.6 : 2.6; }
       else if (crate) tx = crate.x;
+      else { const en = LV.enemies.find(e => e.alive && e.armed && e.z > q.z - 1 && e.z - q.z < 30); if (en) tx = en.x; else if (S.state === 'boss') tx = LV.boss.x; }  // no aiming any more: stand in front of the target
       // lane planner (all bots dodge like a human would; only the random-gate bot guesses gates):
       // score candidate lanes by how much of the army would overlap each hazard while it passes
       const d = G.dims(S.count), hw = d.hw, v = q.speed, lim = Math.max(0, 5 - 0.35 - hw);
@@ -55,6 +56,7 @@ const SIM = (opts) => {
       G.step(1 / 60); t += 1 / 60;
       if (opts.trace && S.fight && !S.fight.__seen) { S.fight.__seen = 1; out.push(`  FIGHT z=${q.z.toFixed(0)} ${S.fight.type} enemy=${S.fight.count} us=${S.count}`); }
       if (S.state === 'boss' && bossT === null) bossT = { t, count: S.count, w: S.weapon };
+      if (opts.trace && S.state === "boss" && Math.round(t * 60) % 60 === 0) out.push(`  BOSS t=${t.toFixed(0)} n=${S.count} hp=${Math.round(LV.boss.hp)} bx=${LV.boss.x.toFixed(1)} qx=${q.x.toFixed(1)} st=${LV.boss.state}`);
       if (S.state === 'boss') minC = Math.min(minC, S.count);
     }
     if (opts.plan) out.push(`L${lv} plan: ${LV.spec.patterns.join(' ')}`);
