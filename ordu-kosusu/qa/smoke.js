@@ -298,14 +298,26 @@ const S = (p, expr, arg) => p.evaluate(expr, arg);
     await S(p, () => { __G.save.level = 21; __G.showMenu(); });
     ok(await S(p, () => __G.LV.th.key === 'snow' && __G.scene.children.find(o => o.isPoints).visible), 'level 21 snow world has weather');
 
-    console.log('# world wrap 40 -> 41');
+    console.log('# world change 40 -> 41 and wrap back to the first world');
+    const worlds = await S(p, () => {
+      const keys = [];
+      for (let w = 0; w < 12; w++) { __G.save.level = w * 10 + 1; __G.showMenu(); if (w > 0 && __G.LV.th.key === keys[0]) break; keys.push(__G.LV.th.key); }
+      return keys;
+    });
+    console.log('  info: worlds ' + worlds.join(' > '));
+    ok(worlds.length >= 4 && new Set(worlds).size === worlds.length, 'every 10 levels a new world (' + worlds.length + ' worlds)');
     const w40 = await winLevel(40);
     ok(w40 === 'win', 'level 40 won (' + w40 + ')');
     await click('#btnNext');
-    ok(await S(p, () => __G.LV.L === 41 && __G.LV.th.key === 'meadow' && !__G.scene.children.find(o => o.isPoints).visible), 'level 41 wraps to the meadow world');
+    ok(await S(p, (k) => __G.LV.L === 41 && __G.LV.th.key === k, worlds[4 % worlds.length]), 'level 41 is world ' + worlds[4 % worlds.length]);
     await tapStart();
-    ok(await S(p, () => { const sp = document.getElementById('splash'); return sp ? sp.classList.contains('go') && sp.textContent.includes('ÇAYIR') : document.getElementById('toast').textContent.includes('YENİ BÖLÜM'); }), 'new world splash on 41');
+    ok(await S(p, () => { const sp = document.getElementById('splash'); return sp ? sp.classList.contains('go') && sp.textContent.includes(__G.LV.th.name) : document.getElementById('toast').textContent.includes('YENİ BÖLÜM'); }), 'new world splash on 41');
     ok(await S(p, () => __T.bot(220)) !== 'play', 'level 41 plays to an end state');
+    const WL = worlds.length * 10;
+    const wW = await winLevel(WL);
+    ok(wW === 'win', `level ${WL} won (${wW})`);
+    await click('#btnNext');
+    ok(await S(p, (WL) => __G.LV.L === WL + 1 && __G.LV.th.key === 'meadow' && !__G.scene.children.find(o => o.isPoints).visible, WL), `level ${WL + 1} wraps to the meadow world`);
 
     console.log('# busy scene: draw calls / update cost (report)');
     const perf = await S(p, () => {
