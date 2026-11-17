@@ -830,7 +830,7 @@ function blockDestroyed(b, reward) {
       // new uniforms: everyone pops into the new look
       for (const s of squad.sold) s.k = 0.35;
     }
-    toast(WEAPONS[b.tier].name + '!');
+    weaponPopup(b.tier);
     sfx.play('upgrade');
     burst(squad.x, 1.2, squad.z, WEAPONS[b.tier].bullet, 24, 5, 0.6, 5, 5);
   } else if (b.kind === 'soldier') {
@@ -1313,6 +1313,12 @@ function floatText(text, cls) {
   el.addEventListener('animationend', () => el.remove());
   host.appendChild(el);
 }
+function weaponPopup(tier) {
+  const w = WEAPONS[tier], el = $('wpn');
+  el.querySelector('b').textContent = w.name;
+  el.querySelector('.wi').innerHTML = '<svg viewBox="0 0 24 24"><path d="M2 9h13l2-2h4v4h-3v2h-5l-1 2h-3l-1 5H5l1-5H2z" fill="' + w.icon + '"/><circle cx="20.5" cy="9" r="1.6" fill="#' + w.bullet.toString(16).padStart(6, '0') + '"/></svg>';
+  el.classList.remove('go'); void el.offsetWidth; el.classList.add('go');
+}
 function pulse(kind) {
   const el = $('pulse');
   el.className = kind || '';
@@ -1406,7 +1412,11 @@ function startRun() {
   LV.lastProg = 0;
   updateCoinsHud();
   const L = LV.L;
-  toast(L > 1 && (L - 1) % 10 === 0 ? 'YENİ BÖLÜM: ' + LV.th.name : 'SEVİYE ' + L);
+  if (L > 1 && (L - 1) % 10 === 0) {
+    const sp = $('splash'); sp.querySelector('b').textContent = LV.th.name;
+    sp.classList.remove('go'); void sp.offsetWidth; sp.classList.add('go');
+    sfx.play('upgrade');
+  } else toast('SEVİYE ' + L);
   showTutorial();
 }
 
@@ -1444,6 +1454,7 @@ document.querySelectorAll('.tog').forEach((t) => t.addEventListener('click', () 
   save[k] = !save[k]; persist();
   if (k === 'sound') { sfx.enabled = save.sound; if (save.sound) sfx.unlock(); }
   if (k === 'eco') onResize();
+  if (k === 'sound' && S.paused) sfx.stopMusic();
   sfx.play('click');
   syncToggles();
 }));
@@ -1452,13 +1463,16 @@ $('btnGear').addEventListener('click', (e) => {
   sfx.unlock();
   syncToggles();
   $('btnHome').classList.toggle('hidden', S.state === 'menu');
+  $('setTitle').textContent = S.state === 'play' || S.state === 'boss' ? 'DURAKLATILDI' : 'AYARLAR';
+  sfx.stopMusic();
   $('settings').classList.remove('hidden');
   S.paused = true;
 });
-$('btnCloseSet').addEventListener('click', () => { $('settings').classList.add('hidden'); S.paused = false; lastT = performance.now(); });
+$('btnCloseSet').addEventListener('click', () => { $('settings').classList.add('hidden'); S.paused = false; lastT = performance.now(); if (save.sound) sfx.startMusic(); });
 $('btnHome').addEventListener('click', () => {
   if (S.state === 'play' || S.state === 'boss') { save.coins += S.runCoins; persist(); }
   showMenu();
+  if (save.sound) sfx.startMusic();
 });
 $('btnNext').addEventListener('click', () => { sfx.play('click'); showMenu(); });
 $('btnRetry').addEventListener('click', () => { sfx.play('click'); showMenu(); });

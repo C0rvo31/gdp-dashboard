@@ -47,6 +47,18 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
 @keyframes pulse{0%{opacity:1}100%{opacity:0}}
 .pill.bump{animation:bump .22s ease-out}
 @keyframes bump{0%{transform:scale(1)}40%{transform:scale(1.2)}100%{transform:scale(1)}}
+#splash{position:fixed;left:0;right:0;top:26%;text-align:center;pointer-events:none;color:#fff;font-weight:900;opacity:0}
+#splash small{display:block;font-size:clamp(16px,5vw,20px);letter-spacing:3px;text-shadow:0 2px 0 rgba(0,0,0,.35);color:var(--gold)}
+#splash b{display:block;font-size:clamp(44px,14vw,64px);letter-spacing:2px;line-height:1;margin-top:4px;text-shadow:0 4px 0 var(--blue-d),0 9px 0 rgba(10,40,100,.35),0 14px 26px rgba(0,0,0,.3)}
+#splash.go{animation:splash 2.1s cubic-bezier(.2,1.2,.4,1) forwards}
+@keyframes splash{0%{opacity:0;transform:scale(.4)}15%{opacity:1;transform:scale(1.12)}25%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:scale(1.1) translateY(-20px)}}
+#wpn{position:fixed;left:50%;top:27%;transform:translateX(-50%);pointer-events:none;display:flex;align-items:center;gap:12px;background:var(--panel);border-radius:20px;padding:10px 20px 10px 12px;box-shadow:0 6px 0 rgba(10,30,70,.28),0 14px 30px rgba(0,0,0,.25);opacity:0;white-space:nowrap}
+#wpn .wi{width:54px;height:54px;border-radius:14px;display:grid;place-items:center;background:#eaf2ff}
+#wpn .wi svg{width:40px;height:40px}
+#wpn small{display:block;font-size:11px;font-weight:900;letter-spacing:1.5px;color:#1b9a4a}
+#wpn b{display:block;font-size:24px;font-weight:900;letter-spacing:1px;line-height:1.1}
+#wpn.go{animation:wpn 1.2s cubic-bezier(.2,1.4,.4,1) forwards}
+@keyframes wpn{0%{opacity:0;transform:translateX(-50%) translateY(20px) scale(.6)}18%{opacity:1;transform:translateX(-50%) scale(1.08)}30%{transform:translateX(-50%) scale(1)}80%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-16px)}}
 #tutorial{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translateX(-50%);width:min(88vw,340px);pointer-events:none;display:flex;flex-direction:column;gap:8px;align-items:center;animation:tutIn .4s ease-out,tutOut .6s ease-in 7s forwards}
 #tutorial div{background:rgba(16,30,60,.72);color:#fff;font-weight:800;font-size:14px;border-radius:14px;padding:8px 14px;text-align:center;backdrop-filter:blur(4px);width:100%}
 @keyframes tutIn{from{opacity:0;transform:translate(-50%,16px)}}
@@ -54,14 +66,15 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
 
 /* Menu */
 #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:calc(var(--safe-top) + 64px) max(16px,env(safe-area-inset-right)) calc(22px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));pointer-events:none}
-#title{text-align:center;pointer-events:none}
+#title{text-align:center;pointer-events:none;display:flex;flex-direction:column;align-items:center}
+#title h1{padding:6px 0 2px}
 #title h1{margin:0;font-size:clamp(40px,12vw,64px);line-height:.92;font-weight:900;color:#fff;letter-spacing:1px;
   text-shadow:0 4px 0 var(--blue-d),0 8px 0 rgba(10,40,100,.35),0 12px 24px rgba(0,0,0,.25);transform:rotate(-3deg);animation:titleBob 3s ease-in-out infinite}
 #title h1 span{color:var(--gold);text-shadow:0 4px 0 #c66d00,0 8px 0 rgba(90,40,0,.35),0 12px 24px rgba(0,0,0,.25)}
 @keyframes titleBob{0%,100%{transform:rotate(-3deg) translateY(0) scale(1)}50%{transform:rotate(-2deg) translateY(-5px) scale(1.03)}}
 #title h1 span{display:inline-block;animation:shine 2.4s ease-in-out infinite}
 @keyframes shine{0%,100%{filter:brightness(1)}50%{filter:brightness(1.18)}}
-#world{margin:16px auto 0;display:inline-flex;flex-direction:column;align-items:center;gap:7px;background:rgba(16,30,60,.5);backdrop-filter:blur(4px);border-radius:18px;padding:8px 16px;color:#fff}
+#world{margin:14px auto 0;display:inline-flex;flex-direction:column;align-items:center;gap:7px;background:rgba(16,30,60,.5);backdrop-filter:blur(4px);border-radius:18px;padding:8px 16px;color:#fff}
 #world b{font-size:16px;font-weight:900;letter-spacing:1.5px}
 #world b small{font-size:12px;opacity:.75;font-weight:800;letter-spacing:.5px;margin-left:6px}
 #dots{display:flex;gap:5px}
@@ -70,7 +83,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
 #dots i.cur{background:var(--gold);border-color:#fff;animation:dotPulse 1s ease-in-out infinite}
 #dots i.boss{border-radius:4px}
 @keyframes dotPulse{50%{transform:scale(1.35)}}
-#title p{margin:14px 0 0;font-weight:800;color:#fff;font-size:15px;text-shadow:0 2px 0 rgba(0,0,0,.3)}
+#title p{margin:18px auto 0;max-width:300px;line-height:1.25;text-wrap:balance;background:rgba(16,30,60,.4);border-radius:14px;padding:6px 12px;font-weight:800;color:#fff;font-size:15px;text-shadow:0 2px 0 rgba(0,0,0,.3)}
 #bottom{width:100%;display:flex;flex-direction:column;align-items:center;gap:16px}
 #startHint{animation:hintPulse 1.6s ease-in-out infinite;display:flex;flex-direction:column;align-items:center;gap:8px;color:#fff;font-weight:900;font-size:18px;text-shadow:0 2px 0 rgba(0,0,0,.35);pointer-events:none}
 @keyframes hintPulse{50%{opacity:.7}}
@@ -101,7 +114,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
 .up.max .cost{background:#e7f8ec}
 
 /* Panels */
-.overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(10,25,55,.35);padding:16px}
+.overlay{z-index:5;position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(10,25,55,.35);padding:16px}
 .card{background:var(--panel);border-radius:26px;padding:26px 22px 22px;width:100%;max-width:360px;text-align:center;box-shadow:0 8px 0 rgba(10,30,70,.25),0 20px 50px rgba(0,0,0,.25);animation:pop .35s cubic-bezier(.2,1.5,.4,1)}
 @keyframes pop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
 .card h2{margin:0;font-size:40px;font-weight:900;letter-spacing:1px}
@@ -153,12 +166,14 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
   <div id="fx"></div>
   <div id="pulse"></div>
   <div id="toast"></div>
+  <div id="splash"><small>YENİ BÖLÜM</small><b></b></div>
+  <div id="wpn"><div class="wi"></div><div><small>YENİ SİLAH</small><b></b></div></div>
 
   <div id="menu">
     <div id="title">
       <h1>ORDU<br><span>KOŞUSU</span></h1>
-      <div id="world"><b><span id="wName">ÇAYIR</span><small id="wLv">SEVİYE 1</small></b><div id="dots"></div></div>
       <p>Askerlerini topla, silahını güçlendir, devi yen!</p>
+      <div id="world"><b><span id="wName">ÇAYIR</span><small id="wLv">SEVİYE 1</small></b><div id="dots"></div></div>
     </div>
     <div id="bottom">
     <div id="startHint"><div class="hand"></div>BAŞLAMAK İÇİN KAYDIR</div>
@@ -205,7 +220,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#9fd6ff;font-family:Ro
 
   <div id="settings" class="overlay hidden">
     <div class="card">
-      <h2 style="font-size:30px;margin-bottom:8px">AYARLAR</h2>
+      <h2 id="setTitle" style="font-size:30px;margin-bottom:8px">AYARLAR</h2>
       <div class="row"><div>Ses</div><button class="tog" data-set="sound"></button></div>
       <div class="row"><div>Titreşim</div><button class="tog" data-set="vibe"></button></div>
       <div class="row"><div>Pil Tasarrufu<small>30 FPS, daha düşük çözünürlük</small></div><button class="tog" data-set="eco"></button></div>
