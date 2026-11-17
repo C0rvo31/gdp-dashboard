@@ -17,5 +17,5 @@ Build first: `cd web && node build.mjs`. Screenshots land in `qa/out/` (git-igno
   and that the finale ends in < 4.6 s), then an ALTIN KOŞUSU gold run (level 5) start → finish. Screenshots `out/bonus-*.png`, exit 1 on failure.
 Bonus levels (`web/src/bonus.js`, `isBonusLevel`): every level ending in 5 (5, 15, 25, 35 …) is an ALTIN KOŞUSU gold run
 instead of a normal level (numbering unchanged). Every level ends on the ×1.2 … ×5 victory stairs that multiply the coin reward.
-Debug hook in the page: `window.__G` = { S, squad, LV, step(dt), startRun, showMenu, save, camera, dims, renderer, scene, setWeapon }.
+Debug hook in the page: `window.__G` = { S, squad, LV, step(dt), startRun, showMenu, save, camera, dims, renderer, scene, troops(), setWeapon }. `troops()` lists the instanced troop renderers (`t.lodD2 = Infinity` disables the far-instance LOD).
 `S.freeCam = true` stops the game camera so a script can place `camera` itself.

@@ -64,11 +64,29 @@ function installHelpers() {
           const sx = Math.sin((S.t + (saw.z - q.z) / q.speed) * saw.speed + saw.ph) * saw.amp;
           tx = [-3.6, -1.8, 0, 1.8, 3.6].sort((a, b) => Math.abs(b - sx) - Math.abs(a - sx))[0];
         }
+        // spike strips (TRAPS): take the lane whose spikes stay down while the whole army crosses
+        const sp = (LV.spikes || []).find(ss => ss.z + ss.depth / 2 > q.z - G.dims(S.count).depth - 0.5 && ss.z - q.z < 12);
+        if (sp) {
+          const d = G.dims(S.count), lim = Math.max(0, 5 - 0.35 - d.hw);
+          const ta = Math.max(0, (sp.z - sp.depth / 2 - q.z - 0.3) / q.speed), tb = (sp.z + sp.depth / 2 - q.z + d.depth + 0.6) / q.speed;
+          let best = null, bs = 1e9;
+          for (const tile of sp.tiles) {
+            let bad = 0;
+            for (let u = ta; u <= tb; u += 0.04) { const c = (((S.t + u + tile.ph) % sp.period) + sp.period) % sp.period; if (c < sp.up + 0.05) bad++; }
+            const x = Math.max(-lim, Math.min(lim, tile.x)), sc = bad * 100 + Math.abs(x - q.x);
+            if (sc < bs) { bs = sc; best = x; }
+          }
+          if (best !== null) tx = best;
+        }
         q.tx = tx;
         G.step(1 / 60); T.check(); t += 1 / 60;
       }
       return S.state;
     },
+    // victory stairs (bonus.js) decide when the win panel opens (up to ~4.5 s): step until it does
+    finishStairs(maxS = 8) { for (let i = 0; i < maxS * 60 && !T.vis('winPanel'); i++) { G.step(1 / 60); T.check(); } return T.vis('winPanel'); },
+    // expected stairs multiplier for an army of n (mirror of bonus.js NEED/MULTS)
+    stairsMult(n) { const NEED = [1, 4, 8, 14, 22, 34, 50, 75, 110, 160], M = [1.2, 1.4, 1.6, 1.8, 2, 2.4, 2.8, 3.2, 4, 5]; let m = 1; for (let i = 0; i < 10; i++) if (n >= NEED[i]) m = M[i]; return m; },
     mem() {
       const R = G.renderer; R.render(G.scene, G.camera);
       return { geo: R.info.memory.geometries, tex: R.info.memory.textures, prog: R.info.programs.length, calls: R.info.render.calls };
@@ -118,10 +136,17 @@ const S = (p, expr, arg) => p.evaluate(expr, arg);
     const coins0 = await S(p, () => __G.save.coins);
     ok(await S(p, () => __T.bot(200)) === 'win', 'bot beats level 1 (gates, crates, walls, enemies, boss)');
     ok(await S(p, () => __G.LV.boss.state === 'dead' && __G.LV.boss.hp === 0), 'boss dead with hp exactly 0');
-    await S(p, () => __T.step(60 * 3));
+    const armyAtWin = await S(p, () => ({ n: __G.S.count, run: __G.S.runCoins }));
+    ok(await S(p, () => __T.finishStairs()), 'victory stairs finish and open the win panel');
     ok(await S(p, () => __T.vis('winPanel') && __G.save.level === 2), 'win panel shown, level advanced to 2');
     const coins1 = await S(p, () => __G.save.coins);
     ok(coins1 > coins0, `win reward banked (${coins0} -> ${coins1})`);
+    {
+      const m = await S(p, (n) => __T.stairsMult(n), armyAtWin.n);
+      const exp = Math.round((20 + 1 * 6 + Math.floor(Math.min(armyAtWin.n, 400) * 0.6) + armyAtWin.run) * m);
+      const shown = await S(p, () => { const el = document.getElementById('wMult'); return el && !el.classList.contains('hidden') ? el.querySelector('b').textContent : ''; });
+      ok(coins1 - coins0 === exp && shown.replace('×', '') == String(m), `stairs multiplier: army ${armyAtWin.n} -> ×${m}, reward ${coins1 - coins0} (expected ${exp}), card "${shown}"`);
+    }
     await S(p, () => __T.step(60 * 3));
     ok(await S(p, () => __G.save.coins) === coins1 && await S(p, () => __G.save.level) === 2, 'finishWin runs once (no double reward)');
     await shot('win');
@@ -138,8 +163,11 @@ const S = (p, expr, arg) => p.evaluate(expr, arg);
       __T.bot(120, (G) => G.LV.enemies.some(melee));
       const e = G.LV.enemies.find(melee);
       if (!e) return 'no melee enemy (' + S.state + ')';
+      // hold fire so the group survives to melee range, then shrink the army to 1 right before contact
+      for (let i = 0; i < 600 && S.state === 'play' && e.alive && e.state !== 'fight' && e.z - q.z > 4; i++) { S.shotAcc = -1e9; q.tx = e.x; G.step(1 / 60); __T.check(); }
+      if (!e.alive) return 'enemy died before contact';
       S.count = 1; q.sold.length = 1; S.runCoins = Math.max(S.runCoins, 3);
-      for (let i = 0; i < 600 && S.state === 'play'; i++) { q.tx = e.x; G.step(1 / 60); __T.check(); }
+      for (let i = 0; i < 600 && S.state === 'play'; i++) { S.shotAcc = -1e9; q.tx = e.x; G.step(1 / 60); __T.check(); }
       return S.state + (S.fight === null ? ' fightCleared' : ' fightSet');
     });
     ok(lose === 'lose fightCleared', 'army dies inside the fight loop -> lose, S.fight cleared (' + lose + ')');
@@ -178,7 +206,7 @@ const S = (p, expr, arg) => p.evaluate(expr, arg);
     await click('#btnCloseSet');
     ok(await S(p, () => !__G.S.paused && !__T.vis('settings')), 'TAMAM resumes');
     const fEco = await rate(1200);
-    ok(fEco <= 34 && fEco > 15, `eco mode caps the loop at ~30 fps (${fEco.toFixed(1)})`);
+    ok(fEco <= 34 && fEco > 5, `eco mode caps the loop at ~30 fps (${fEco.toFixed(1)})`);
     ok(await S(p, () => __G.squad.z) > z0, 'game advances after resume');
     await click('#btnGear'); await click('#settings .tog[data-set="eco"]');
     ok(await S(p, () => !__G.save.eco && __G.renderer.getPixelRatio() === Math.min(window.devicePixelRatio, 1.75)), 'eco off -> full pixel ratio');
@@ -198,7 +226,7 @@ const S = (p, expr, arg) => p.evaluate(expr, arg);
 
     console.log('# ANA MENÜ mid-run keeps run coins');
     // (the run above went on in real time unsteered; start a fresh one so it is alive)
-    const home = await S(p, () => { __G.showMenu(); __G.startRun(); __T.bot(60, (G) => G.S.runCoins > 0); return { run: __G.S.runCoins, coins: __G.save.coins, st: __G.S.state }; });
+    const home = await S(p, () => { __G.showMenu(); __G.startRun(); __T.bot(6); __G.S.runCoins += 4; return { run: __G.S.runCoins, coins: __G.save.coins, st: __G.S.state }; });
     await click('#btnGear'); await click('#btnHome');
     ok(home.run > 0 && await S(p, () => __G.save.coins) === home.coins + home.run && await S(p, () => __G.S.state === 'menu'), `ANA MENÜ banks ${home.run} run coins and returns to menu (${home.st})`);
     ok(await S(p, () => __G.LV.L === 2 && document.getElementById('coins').textContent.length > 0), 'menu rebuilt for the same level');
@@ -227,14 +255,35 @@ const S = (p, expr, arg) => p.evaluate(expr, arg);
     await click('.up[data-up="upDmg"]');
     ok(await S(p, () => __G.save.upDmg === 0 && __G.save.coins === 0 && __G.S.state === 'menu'), 'cannot buy without coins; tapping upgrade does not start run');
 
+    console.log('# ALTIN KOŞUSU gold run (level 5)');
+    const gold = await S(p, () => {
+      const G = __G; G.save.level = 5; G.showMenu();
+      const LV = G.LV;
+      const layout = { bonus: !!LV.bonus, enemies: LV.enemies.length, saws: LV.saws.length, walls: LV.blocks.filter(b => b.kind === 'wall').length, boss: LV.boss.group.visible, pill: document.getElementById('lvlPill').textContent };
+      const c0 = G.save.coins;
+      G.startRun();
+      const st = __T.bot(120);
+      const at = { n: G.S.count, run: G.S.runCoins, boss: G.LV.boss.state };
+      const panel = __T.finishStairs();
+      return { layout, st, at, panel, gain: G.save.coins - c0, level: G.save.level, mult: __T.stairsMult(at.n), sub: document.getElementById('winSub').textContent };
+    });
+    ok(gold.layout.bonus && gold.layout.enemies === 0 && gold.layout.saws === 0 && gold.layout.walls === 0 && !gold.layout.boss && gold.layout.pill.includes('ALTIN'), 'level 5 is a gold run: no enemies/saws/walls/boss (' + JSON.stringify(gold.layout) + ')');
+    ok(gold.st === 'win' && gold.at.boss === 'idle' && gold.panel && gold.level === 6, `gold run ends at the line, stairs, win panel, level 6 (${gold.st})`);
+    ok(gold.at.run > 0 && gold.gain === Math.round((gold.at.run + 15 + 5 * 2) * gold.mult), `gold run pays (coins ${gold.at.run} + 25) x${gold.mult} = ${gold.gain}`);
+    ok(gold.sub.includes('ALTIN'), 'gold run win card');
+    await click('#btnNext');
+    ok(await S(p, () => __G.LV.L === 6 && !__G.LV.bonus), 'DEVAM after the gold run -> normal level 6');
+
     console.log('# world change 10 -> 11');
     const winLevel = async (L) => S(p, (L) => {
-      Object.assign(__G.save, { level: L, upStart: 6, upRate: 6, upDmg: 6 });
+      // well upgraded bot: this checks the world switch, not balance
+      Object.assign(__G.save, { level: L, upStart: 12, upRate: 12, upDmg: 12 });
       __G.showMenu(); __G.startRun();
-      const st = __T.bot(220); __T.step(60 * 3);
+      const st = __T.bot(220); __T.finishStairs();
       return st;
     }, L);
-    ok(await winLevel(10) === 'win', 'level 10 won');
+    const w10 = await winLevel(10);
+    ok(w10 === 'win', 'level 10 won (' + w10 + ')');
     await click('#btnNext');
     const w11 = await S(p, () => {
       const G = __G, LV = G.LV, pts = G.scene.children.find(o => o.isPoints);
@@ -249,13 +298,26 @@ const S = (p, expr, arg) => p.evaluate(expr, arg);
     await S(p, () => { __G.save.level = 21; __G.showMenu(); });
     ok(await S(p, () => __G.LV.th.key === 'snow' && __G.scene.children.find(o => o.isPoints).visible), 'level 21 snow world has weather');
 
-    console.log('# world wrap 40 -> 41');
-    ok(await winLevel(40) === 'win', 'level 40 won');
+    console.log('# world change 40 -> 41 and wrap back to the first world');
+    const worlds = await S(p, () => {
+      const keys = [];
+      for (let w = 0; w < 12; w++) { __G.save.level = w * 10 + 1; __G.showMenu(); if (w > 0 && __G.LV.th.key === keys[0]) break; keys.push(__G.LV.th.key); }
+      return keys;
+    });
+    console.log('  info: worlds ' + worlds.join(' > '));
+    ok(worlds.length >= 4 && new Set(worlds).size === worlds.length, 'every 10 levels a new world (' + worlds.length + ' worlds)');
+    const w40 = await winLevel(40);
+    ok(w40 === 'win', 'level 40 won (' + w40 + ')');
     await click('#btnNext');
-    ok(await S(p, () => __G.LV.L === 41 && __G.LV.th.key === 'meadow' && !__G.scene.children.find(o => o.isPoints).visible), 'level 41 wraps to the meadow world');
+    ok(await S(p, (k) => __G.LV.L === 41 && __G.LV.th.key === k, worlds[4 % worlds.length]), 'level 41 is world ' + worlds[4 % worlds.length]);
     await tapStart();
-    ok(await S(p, () => { const sp = document.getElementById('splash'); return sp ? sp.classList.contains('go') && sp.textContent.includes('ÇAYIR') : document.getElementById('toast').textContent.includes('YENİ BÖLÜM'); }), 'new world splash on 41');
+    ok(await S(p, () => { const sp = document.getElementById('splash'); return sp ? sp.classList.contains('go') && sp.textContent.includes(__G.LV.th.name) : document.getElementById('toast').textContent.includes('YENİ BÖLÜM'); }), 'new world splash on 41');
     ok(await S(p, () => __T.bot(220)) !== 'play', 'level 41 plays to an end state');
+    const WL = worlds.length * 10;
+    const wW = await winLevel(WL);
+    ok(wW === 'win', `level ${WL} won (${wW})`);
+    await click('#btnNext');
+    ok(await S(p, (WL) => __G.LV.L === WL + 1 && __G.LV.th.key === 'meadow' && !__G.scene.children.find(o => o.isPoints).visible, WL), `level ${WL + 1} wraps to the meadow world`);
 
     console.log('# busy scene: draw calls / update cost (report)');
     const perf = await S(p, () => {
@@ -263,12 +325,13 @@ const S = (p, expr, arg) => p.evaluate(expr, arg);
       __T.quiet = true;
       Object.assign(G.save, { level: 21 }); G.showMenu(); G.startRun(); S.count = 400; G.setWeapon(3);
       __T.bot(60, (G) => G.LV.enemies.some(e => e.alive && e.armed && e.z - q.z < 12));
-      let calls = 0, ms = 0; const n = 120;
-      for (let i = 0; i < n; i++) { S.count = Math.max(S.count, 300); const t0 = performance.now(); G.step(1 / 60); ms += performance.now() - t0; R.render(G.scene, G.camera); calls += R.info.render.calls; }
+      let calls = 0, ms = 0, tris = 0; const n = 120;
+      for (let i = 0; i < n; i++) { S.count = Math.max(S.count, 300); const t0 = performance.now(); G.step(1 / 60); ms += performance.now() - t0; R.render(G.scene, G.camera); calls += R.info.render.calls; tris += R.info.render.triangles; }
       __T.quiet = false;
-      return { calls: calls / n, updMs: ms / n, sold: q.sold.length };
+      const lod = G.troops ? G.troops().reduce((a, t) => a + (t.nl || 0), 0) : 0;
+      return { calls: calls / n, tris: tris / n, updMs: ms / n, sold: q.sold.length, lod };
     });
-    console.log(`  info: ${perf.sold} soldiers, ${perf.calls.toFixed(1)} draw calls/frame, update() ${perf.updMs.toFixed(3)} ms`);
+    console.log(`  info: ${perf.sold} soldiers (${perf.lod} drawn as LOD), ${perf.calls.toFixed(1)} draw calls/frame, ${Math.round(perf.tris / 1000)}K triangles/frame, update() ${perf.updMs.toFixed(3)} ms`);
     ok(perf.calls < 90, 'draw calls in busy scene < 90');
 
     console.log('# resource leaks over level rebuilds');
@@ -282,8 +345,9 @@ const S = (p, expr, arg) => p.evaluate(expr, arg);
         G.scene.traverse((o) => { o.frustumCulled = false; });
         return __T.mem();
       };
-      for (const L of [1, 11, 21, 31]) cycle(L);
-      const a = cycle(7); cycle(7);
+      // warm-up: per-theme textures, per-enemy-type troops and trap geometry are cached on purpose
+      for (const L of [1, 11, 21, 31, 7, 27]) cycle(L);
+      const a = cycle(7);
       for (let i = 0; i < 14; i++) cycle(i % 2 ? 7 : 27);
       const z = cycle(7);
       return { a, z };

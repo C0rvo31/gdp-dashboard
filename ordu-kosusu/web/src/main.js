@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Sfx } from './audio.js';
 import { clamp, lerp, ease, mulberry32, makeCanvas, roundRect, canvasTex, setMaxAniso, FONT, fmt, strokeText } from './util.js';
-import { addRim, buildSoldier, buildLeg, SOLDIER_LEGS, buildGun, buildEnemy, buildEnemyLeg, tint, plain } from './models.js';
+import { addRim, buildSoldier, buildLeg, SOLDIER_LEGS, buildGun, buildEnemy, buildEnemyLeg, tint, plain, buildSoldierLOD, buildEnemyLOD } from './models.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { THEMES, themeFor, themeIndex, themeTextures, buildDecor, riverPaths, riverBlocked, buildRivers, skylineMesh } from './world.js';
 import { PMAT, gateFrame, wallDeco, crateTrim, coinGeo, sawTrack, finishProps, arenaProps } from './props.js';
@@ -176,7 +176,7 @@ const G = {
   coin: new THREE.CylinderGeometry(0.32, 0.32, 0.08, 18).rotateX(Math.PI / 2),
 };
 const PLAYER_GEO = [0, 1, 2, 3, 4].map((t) => ({
-  body: buildSoldier(t), leg: buildLeg(...SOLDIER_LEGS[t]), gun: buildGun(t),
+  body: buildSoldier(t), leg: buildLeg(...SOLDIER_LEGS[t]), gun: buildGun(t), lod: buildSoldierLOD(t),
 }));
 
 // ============================================================ instanced troop renderer
@@ -193,9 +193,11 @@ function wLeg(a, o, c, s, cb, sb, x, y, z, k) {
   a[o + 12] = x; a[o + 13] = y; a[o + 14] = z; a[o + 15] = 1;
 }
 
+// LOD: instances farther than lodD from the camera use one low-poly mesh (no separate legs/gun)
+const LOD_PLAYER = 17, LOD_ENEMY = 20;
 class Troop {
-  constructor(max, bodyGeo, legGeo, gunGeo) {
-    this.max = max; this.n = 0;
+  constructor(max, bodyGeo, legGeo, gunGeo, lodGeo, lodD) {
+    this.max = max; this.n = 0; this.nl = 0; this.ns = 0; this.lodD2 = lodD * lodD;
     const mk = (geo, mat) => {
       const m = new THREE.InstancedMesh(geo, mat, max);
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -207,41 +209,40 @@ class Troop {
     this.legL = mk(legGeo, MAT.char);
     this.legR = mk(legGeo, MAT.char);
     this.gun = gunGeo ? mk(gunGeo, MAT.gun) : null;
-    this.meshes = [this.shadow, this.body, this.legL, this.legR];
+    this.lod = mk(lodGeo, MAT.char);
+    this.meshes = [this.body, this.legL, this.legR];
     if (this.gun) this.meshes.push(this.gun);
   }
-  setGeo(body, leg, gun) {
+  setGeo(body, leg, gun, lod) {
     this.body.geometry = body; this.legL.geometry = leg; this.legR.geometry = leg;
     if (this.gun && gun) this.gun.geometry = gun;
+    if (lod) this.lod.geometry = lod;
   }
-  begin() { this.n = 0; }
+  begin() { this.n = 0; this.nl = 0; this.ns = 0; }
   push(x, y, z, ry, swing, k) {
-    if (this.n >= this.max || k <= 0.01) return;
-    const o = this.n++ * 16, c = Math.cos(ry), s = Math.sin(ry);
+    if (this.ns >= this.max || k <= 0.01) return;
+    const c = Math.cos(ry), s = Math.sin(ry), cp = camera.position;
+    wRy(this.shadow.instanceMatrix.array, this.ns++ * 16, 1, 0, x, 0, z, k);
+    const dx = x - cp.x, dy = y - cp.y, dz = z - cp.z;
+    if (dx * dx + dy * dy + dz * dz > this.lodD2) { wRy(this.lod.instanceMatrix.array, this.nl++ * 16, c, s, x, y, z, k); return; }
+    const o = this.n++ * 16;
     wRy(this.body.instanceMatrix.array, o, c, s, x, y, z, k);
     if (this.gun) wRy(this.gun.instanceMatrix.array, o, c, s, x, y, z, k);
-    wRy(this.shadow.instanceMatrix.array, o, 1, 0, x, 0, z, k);
     const cb = Math.cos(swing), sb = Math.sin(swing), hy = y + 0.45 * k, hx = 0.075 * k;
     wLeg(this.legL.instanceMatrix.array, o, c, s, cb, sb, x - c * hx, hy, z + s * hx, k);
     wLeg(this.legR.instanceMatrix.array, o, c, s, cb, -sb, x + c * hx, hy, z - s * hx, k);
   }
   end() {
-    const vis = this.n > 0;
-    for (const m of this.meshes) {
-      m.count = this.n;
-      m.visible = vis; // count-0 instanced meshes still cost a draw setup each frame
-      if (!vis) continue;
-      m.instanceMatrix.clearUpdateRanges();
-      m.instanceMatrix.addUpdateRange(0, Math.max(1, this.n) * 16);
-      m.instanceMatrix.needsUpdate = true;
-    }
+    for (const m of this.meshes) flushInst(m, this.n); // empty meshes are hidden (no draw setup)
+    flushInst(this.lod, this.nl);
+    flushInst(this.shadow, this.ns);
   }
 }
 
-const pTroop = new Troop(MAXV, PLAYER_GEO[0].body, PLAYER_GEO[0].leg, PLAYER_GEO[0].gun);
+const pTroop = new Troop(MAXV, PLAYER_GEO[0].body, PLAYER_GEO[0].leg, PLAYER_GEO[0].gun, PLAYER_GEO[0].lod, LOD_PLAYER);
 const ETROOPS = {};
 function eTroop(type) {
-  if (!ETROOPS[type]) ETROOPS[type] = new Troop(300, buildEnemy(type), buildEnemyLeg(type), null);
+  if (!ETROOPS[type]) ETROOPS[type] = new Troop(300, buildEnemy(type), buildEnemyLeg(type), null, buildEnemyLOD(type), LOD_ENEMY);
   return ETROOPS[type];
 }
 
@@ -916,7 +917,7 @@ function killEnemyFront(g) {
 
 function setWeaponVisual(w) {
   const pg = PLAYER_GEO[w];
-  pTroop.setGeo(pg.body, pg.leg, pg.gun);
+  pTroop.setGeo(pg.body, pg.leg, pg.gun, pg.lod);
   MAT.bullet.color.setHex(WEAPONS[w].bullet);
   const bd = $('wBadge');
   if (bd) bd.innerHTML = WEAPONS[w].name + ' <b>×' + String(WEAPONS[w].dmg).replace('.', ',') + '</b>';
@@ -1884,7 +1885,7 @@ initBonus({ scene, S, squad, getLV: () => LV, MAT, burst, confetti, sfx, toast, 
 
 // debug / testing hook
 window.__G = {
-  S, squad, get LV() { return LV; }, startRun, showMenu, save, step: update, camera, dims, renderer, scene,
+  S, squad, get LV() { return LV; }, startRun, showMenu, save, step: update, camera, dims, renderer, scene, troops: () => [pTroop, ...Object.values(ETROOPS)],
   setWeapon: (w) => { S.weapon = w; setWeaponVisual(w); },
 };
 
