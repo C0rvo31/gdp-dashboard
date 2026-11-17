@@ -5,6 +5,8 @@ import { addRim, buildSoldier, buildLeg, SOLDIER_LEGS, buildGun, buildEnemy, bui
 import { THEMES, themeFor, themeIndex, themeTextures, buildDecor } from './world.js';
 import { ETYPES, nice, niceHp, applyOp, opText, isGood, makeOp, genLevel } from './levels.js';
 import { buildBoss } from './boss.js';
+// BONUS: victory stairs finale + ALTIN KOŞUSU gold-run levels
+import { initBonus, isBonusLevel, bonusSpec, bonusBuild, bonusTick, stairsActive, stairsUpdate, stairsPose, stairsDrawStayers, stairsLabel, stairsCam, bonusReward, bonusWinCard, bonusMenu, bonusStart } from './bonus.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -459,7 +461,7 @@ function gateTexture(op) {
 
 function buildLevel(L) {
   if (LV) disposeLevel();
-  const spec = genLevel(L);
+  const spec = isBonusLevel(L) ? bonusSpec(L) : genLevel(L); // BONUS: gold-run layout
   const th = spec.th;
   applyTheme(th);
   MAT.ebullet.color.setHex(ETYPES[th.shooter].bullet);
@@ -595,6 +597,7 @@ function buildLevel(L) {
   // boss
   LV.boss = makeBoss(spec.bossZ, L, th.boss);
   grp.add(LV.boss.group);
+  bonusBuild(LV); // BONUS: reset stairs, gems for gold runs
 
   // reset run state
   squad.x = squad.tx = 0; squad.z = 0; squad.speed = spec.speed;
@@ -1127,7 +1130,7 @@ function updatePlay(dt) {
   squad.x += (squad.tx - squad.x) * Math.min(1, dt * 12);
   if (S.state === 'play') {
     squad.z += squad.speed * (S.fight ? 0.25 : 1) * dt;
-    if (squad.z >= LV.bossLine) { squad.z = LV.bossLine; enterBoss(); }
+    if (squad.z >= LV.bossLine) { squad.z = LV.bossLine; if (LV.bonus) { S.state = 'win'; S.endT = 0; } else enterBoss(); } // BONUS: gold run ends at the line
   }
   armObjects();
   updateFormation(dt);
@@ -1154,7 +1157,7 @@ function lose() {
 }
 function finishWin() {
   const L = LV.L;
-  const reward = 20 + L * 6 + Math.floor(Math.min(S.count, 400) * 0.6) + S.runCoins;
+  const reward = bonusReward(20 + L * 6 + Math.floor(Math.min(S.count, 400) * 0.6) + S.runCoins, L); // BONUS: stairs multiplier
   save.coins += reward; save.level = L + 1; persist();
   $('wSold').textContent = fmt(S.count);
   $('wColl').textContent = S.collected;
@@ -1162,6 +1165,7 @@ function finishWin() {
   countUp($('wCoins'), reward);
   pulse('good');
   $('winSub').textContent = 'Seviye ' + L + ' tamamlandı' + (L % 10 === 0 ? ' · Yeni bölüm açıldı!' : '');
+  bonusWinCard(L); // BONUS: ×N ÇARPAN line, gold-run summary
   $('winPanel').classList.remove('hidden');
   updateCoinsHud();
   sfx.play('win');
@@ -1173,13 +1177,16 @@ function drawTroops() {
   const running = S.state === 'play';
   const cheering = S.state === 'win' && LV.boss.state === 'dead' && LV.boss.t > 0.8;
   pTroop.begin();
+  const stairs = stairsActive(); // BONUS
   for (const s of squad.sold) {
+    if (stairs) { const P = stairsPose(s, t); pTroop.push(s.x, P.y, s.z, P.ry, P.sw, s.k); continue; } // BONUS: on the steps
     let y = 0, sw = 0;
     if (running) { const p = Math.sin(t * 14 + s.ph); y = Math.abs(p) * 0.07; sw = p * 0.7; }
     else if (cheering) { y = Math.abs(Math.sin(t * 7 + s.ph)) * 0.55; sw = 0.3; }
     else y = Math.sin(t * 3 + s.ph) * 0.015 + 0.015;
     pTroop.push(s.x, y, s.z, 0, sw, s.k);
   }
+  if (stairs) stairsDrawStayers(pTroop, t); // BONUS: soldiers left behind on the steps
   pTroop.end();
   for (const k in ETROOPS) ETROOPS[k].begin();
   for (const g of LV.enemies) {
@@ -1199,6 +1206,7 @@ function drawTroops() {
   const d = dims(S.count);
   squadLabel.sprite.visible = S.count > 0;
   squadLabel.sprite.position.set(squad.x, 2.0, squad.z - Math.min(d.depth, 3) * 0.5);
+  if (stairs) stairsLabel(squadLabel); // BONUS: climbers left
 
   if (LV.coinMesh) {
     const a = LV.coinMesh.instanceMatrix.array;
@@ -1228,6 +1236,7 @@ function updateCamera(dt) {
     lx = squad.x * 0.3; ly = 0; lz = squad.z + 9;
     if (bossy) { py += 2.5; pz -= 3; lz = squad.z + 13; ly = 1.5; }
   }
+  if (stairsActive()) { const c = stairsCam(); px = c.px; py = c.py; pz = c.pz; lx = c.lx; ly = c.ly; lz = c.lz; } // BONUS: follow the climb
   const k = Math.min(1, dt * 4);
   camera.position.x += (px - camera.position.x) * k;
   camera.position.y += (py - camera.position.y) * k;
@@ -1252,10 +1261,10 @@ function update(dt) {
   } else {
     if (S.state === 'win') {
       updateBoss(dt);
+      // BONUS: the victory stairs drive the finale; the panel opens when the climb is over
+      if (stairsUpdate(dt) && !S.endShown) { S.endShown = true; finishWin(); }
       updateFormation(dt);
       S.endT += dt;
-      if (LV.boss.t > 0.9 && !S.confetti) { S.confetti = true; confetti(squad.x, squad.z + 4, 120); }
-      if (S.endT > 2.4 && !S.endShown) { S.endShown = true; finishWin(); }
     } else if (S.state === 'lose') {
       S.endT += dt;
       if (S.endT > 1.1 && !S.endShown) { S.endShown = true; $('losePanel').classList.remove('hidden'); }
@@ -1267,6 +1276,7 @@ function update(dt) {
     updateShooting(dt);
     updateEnemyFire(dt);
   }
+  bonusTick(dt); // BONUS: gems
   updateParticles(dt);
   drawTroops();
   updateCamera(dt);
@@ -1391,6 +1401,7 @@ function refreshMenu() {
     el.classList.toggle('poor', !maxed && save.coins < cost);
     el.classList.toggle('max', maxed);
   });
+  bonusMenu(save.level); // BONUS: gold-run pill / dot
 }
 
 function showMenu() {
@@ -1412,7 +1423,7 @@ function startRun() {
   LV.lastProg = 0;
   updateCoinsHud();
   const L = LV.L;
-  if (L > 1 && (L - 1) % 10 === 0) {
+  if (bonusStart(L)) { /* BONUS: gold-run splash */ } else if (L > 1 && (L - 1) % 10 === 0) {
     const sp = $('splash'); sp.querySelector('b').textContent = LV.th.name;
     sp.classList.remove('go'); void sp.offsetWidth; sp.classList.add('go');
     sfx.play('upgrade');
@@ -1493,6 +1504,9 @@ const endDrag = () => { dragging = false; };
 window.addEventListener('pointerup', endDrag);
 window.addEventListener('pointercancel', endDrag);
 window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// BONUS: hand the bonus module what it needs from here
+initBonus({ scene, S, squad, getLV: () => LV, MAT, burst, confetti, sfx, toast, floatText, updateCoinsHud, dims, vibrate, pulse });
 
 // debug / testing hook
 window.__G = {
