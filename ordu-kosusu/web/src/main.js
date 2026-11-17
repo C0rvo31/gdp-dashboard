@@ -140,6 +140,14 @@ const TEX = {};
   c = makeCanvas(128, 32); x = c.getContext('2d');
   for (let i = 0; i < 8; i++) for (let j = 0; j < 2; j++) { x.fillStyle = (i + j) % 2 ? '#1b2236' : '#ffffff'; x.fillRect(i * 16, j * 16, 16, 16); }
   TEX.checker = canvasTex(c); TEX.checker.magFilter = THREE.NearestFilter;
+
+  c = makeCanvas(128, 128); x = c.getContext('2d'); // boss slam telegraph: soft fill + hard rim + hazard dashes
+  g = x.createRadialGradient(64, 64, 10, 64, 64, 62);
+  g.addColorStop(0, 'rgba(255,255,255,0.45)'); g.addColorStop(0.8, 'rgba(255,255,255,0.75)'); g.addColorStop(1, 'rgba(255,255,255,0.8)');
+  x.fillStyle = g; x.beginPath(); x.arc(64, 64, 62, 0, 7); x.fill();
+  x.strokeStyle = '#fff'; x.lineWidth = 7; x.beginPath(); x.arc(64, 64, 58, 0, 7); x.stroke();
+  x.lineWidth = 4; x.setLineDash([10, 10]); x.beginPath(); x.arc(64, 64, 40, 0, 7); x.stroke();
+  TEX.ring = new THREE.CanvasTexture(c);
 })();
 
 // ============================================================ materials & geometry
@@ -174,6 +182,7 @@ const G = {
   ebullet: new THREE.SphereGeometry(0.1, 8, 6).scale(1, 1, 2.2),
   particle: new THREE.BoxGeometry(0.16, 0.16, 0.16),
   coin: new THREE.CylinderGeometry(0.32, 0.32, 0.08, 18).rotateX(Math.PI / 2),
+  teleQuad: new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2),
 };
 const PLAYER_GEO = [0, 1, 2, 3, 4].map((t) => ({
   body: buildSoldier(t), leg: buildLeg(...SOLDIER_LEGS[t]), gun: buildGun(t), lod: buildSoldierLOD(t),
@@ -194,12 +203,12 @@ function wLeg(a, o, c, s, cb, sb, x, y, z, k) {
 }
 
 // LOD: instances farther than lodD from the camera use one low-poly mesh (no separate legs/gun)
-const LOD_PLAYER = 17, LOD_ENEMY = 20;
+const LOD_PLAYER = 17, LOD_ENEMY = 20, FALL_T = 0.55;
 class Troop {
-  constructor(max, bodyGeo, legGeo, gunGeo, lodGeo, lodD) {
+  constructor(max, bodyGeo, legGeo, gunGeo, lodGeo, lodD, fmax = 24) {
     this.max = max; this.n = 0; this.nl = 0; this.ns = 0; this.lodD2 = lodD * lodD;
-    const mk = (geo, mat) => {
-      const m = new THREE.InstancedMesh(geo, mat, max);
+    const mk = (geo, mat, cnt = max) => {
+      const m = new THREE.InstancedMesh(geo, mat, cnt);
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.count = 0; m.frustumCulled = false; scene.add(m);
       return m;
@@ -212,22 +221,61 @@ class Troop {
     this.lod = mk(lodGeo, MAT.char);
     this.meshes = [this.body, this.legL, this.legR];
     if (this.gun) this.meshes.push(this.gun);
+    // death pool: recycled "falling" bodies (tip over backwards, fly back, sink); fixed arrays, no per-frame allocation
+    this.fmax = fmax; this.fnext = 0; this.ftop = 0; this.fd = new Float32Array(fmax * 12);
+    this.fall = mk(bodyGeo, MAT.char, fmax);
+  }
+  spawnFall(x, z, ry, dir, k) {
+    const f = this.fd, i = this.fnext, o = i * 12; this.fnext = (i + 1) % this.fmax;
+    f[o] = x; f[o + 1] = 0; f[o + 2] = z; f[o + 3] = (Math.random() - 0.5) * 2; f[o + 4] = dir * (3 + Math.random() * 2.5);
+    f[o + 5] = 2 + Math.random() * 1.5; f[o + 6] = 0; f[o + 7] = -(6 + Math.random() * 3); f[o + 8] = ry + (Math.random() - 0.5) * 0.9;
+    f[o + 9] = FALL_T; f[o + 10] = k > 0.2 ? k : 0.2;
+    if (i + 1 > this.ftop) this.ftop = i + 1;
+  }
+  updateFall(dt) {
+    const f = this.fd, a = this.fall.instanceMatrix.array;
+    let n = 0, top = 0;
+    for (let i = 0; i < this.ftop; i++) {
+      const o = i * 12;
+      if (f[o + 9] <= 0) continue;
+      f[o + 9] -= dt;
+      const dr = Math.max(0, 1 - dt * 3);
+      f[o] += f[o + 3] * dt; f[o + 2] += f[o + 4] * dt; f[o + 3] *= dr; f[o + 4] *= dr;
+      f[o + 5] -= 16 * dt; f[o + 1] += f[o + 5] * dt;
+      if (f[o + 1] < 0) { f[o + 1] = 0; f[o + 5] = 0; }
+      f[o + 6] = Math.max(-1.5, f[o + 6] + f[o + 7] * dt);
+      const life = f[o + 9], k = f[o + 10] * Math.min(1, life / 0.18);
+      top = i + 1;
+      if (k <= 0.01) continue;
+      const ry = f[o + 8];
+      wLeg(a, n++ * 16, Math.cos(ry), Math.sin(ry), Math.cos(f[o + 6]), Math.sin(f[o + 6]), f[o], f[o + 1] - (life < 0.18 ? (0.18 - life) * 0.6 : 0), f[o + 2], k);
+    }
+    this.ftop = top;
+    flushInst(this.fall, n);
   }
   setGeo(body, leg, gun, lod) {
+    this.fall.geometry = body;
     this.body.geometry = body; this.legL.geometry = leg; this.legR.geometry = leg;
     if (this.gun && gun) this.gun.geometry = gun;
     if (lod) this.lod.geometry = lod;
   }
   begin() { this.n = 0; this.nl = 0; this.ns = 0; }
-  push(x, y, z, ry, swing, k) {
+  push(x, y, z, ry, swing, k, tilt = 0, lz = 0) {
     if (this.ns >= this.max || k <= 0.01) return;
+    z += lz;
     const c = Math.cos(ry), s = Math.sin(ry), cp = camera.position;
     wRy(this.shadow.instanceMatrix.array, this.ns++ * 16, 1, 0, x, 0, z, k);
     const dx = x - cp.x, dy = y - cp.y, dz = z - cp.z;
     if (dx * dx + dy * dy + dz * dz > this.lodD2) { wRy(this.lod.instanceMatrix.array, this.nl++ * 16, c, s, x, y, z, k); return; }
     const o = this.n++ * 16;
-    wRy(this.body.instanceMatrix.array, o, c, s, x, y, z, k);
-    if (this.gun) wRy(this.gun.instanceMatrix.array, o, c, s, x, y, z, k);
+    if (tilt) { // melee lunge: lean the whole body forward
+      const ct = Math.cos(tilt), st = Math.sin(tilt);
+      wLeg(this.body.instanceMatrix.array, o, c, s, ct, st, x, y, z, k);
+      if (this.gun) wLeg(this.gun.instanceMatrix.array, o, c, s, ct, st, x, y, z, k);
+    } else {
+      wRy(this.body.instanceMatrix.array, o, c, s, x, y, z, k);
+      if (this.gun) wRy(this.gun.instanceMatrix.array, o, c, s, x, y, z, k);
+    }
     const cb = Math.cos(swing), sb = Math.sin(swing), hy = y + 0.45 * k, hx = 0.075 * k;
     wLeg(this.legL.instanceMatrix.array, o, c, s, cb, sb, x - c * hx, hy, z + s * hx, k);
     wLeg(this.legR.instanceMatrix.array, o, c, s, cb, -sb, x + c * hx, hy, z - s * hx, k);
@@ -239,10 +287,10 @@ class Troop {
   }
 }
 
-const pTroop = new Troop(MAXV, PLAYER_GEO[0].body, PLAYER_GEO[0].leg, PLAYER_GEO[0].gun, PLAYER_GEO[0].lod, LOD_PLAYER);
+const pTroop = new Troop(MAXV, PLAYER_GEO[0].body, PLAYER_GEO[0].leg, PLAYER_GEO[0].gun, PLAYER_GEO[0].lod, LOD_PLAYER, 48);
 const ETROOPS = {};
 function eTroop(type) {
-  if (!ETROOPS[type]) ETROOPS[type] = new Troop(300, buildEnemy(type), buildEnemyLeg(type), null, buildEnemyLOD(type), LOD_ENEMY);
+  if (!ETROOPS[type]) ETROOPS[type] = new Troop(300, buildEnemy(type), buildEnemyLeg(type), null, buildEnemyLOD(type), LOD_ENEMY, 24);
   return ETROOPS[type];
 }
 
@@ -742,7 +790,7 @@ function buildLevel(L) {
 
   // boss
   LV.boss = makeBoss(spec.bossZ, L, th.boss);
-  grp.add(LV.boss.group);
+  grp.add(LV.boss.group); grp.add(LV.boss.tele[0], LV.boss.tele[1]);
   bonusBuild(LV); // BONUS: reset stairs, gems for gold runs
 
   // reset run state
@@ -842,20 +890,84 @@ function makeBoss(z, L, kind) {
   b.group.scale.setScalar(s);
   b.group.rotation.y = Math.PI;
   b.group.position.set(0, 0, z);
-  return Object.assign(b, { kind, s, x: 0, z, hp: 1, max: 1, state: 'idle', t: 0, atk: 0, flash: 0, hitDone: false, boomed: false });
+  // telegraph decal for the dodgeable area slam: outer ring + inner fill that grows until the hit (2 quads, hidden unless telegraphing)
+  const fx = BOSS_FX[kind] || BOSS_FX.orc;
+  b.tele = [0, 1].map(() => {
+    const m = new THREE.Mesh(G.teleQuad, new THREE.MeshBasicMaterial({ map: TEX.ring, color: fx.col, transparent: true, depthWrite: false, opacity: 0.6 }));
+    m.visible = false; m.renderOrder = 3; b.own.push(m.material); return m;
+  });
+  return Object.assign(b, { kind, s, x: 0, z, hp: 1, max: 1, state: 'idle', t: 0, atk: 0, flash: 0, hitDone: false, boomed: false,
+    nAtk: 0, atkT: 1, special: false, needCycle: true, spOn: false, spX: 0, spZ: 0, spRx: 2.2, spRz: 3.4, spRem: 0, fxAcc: 0,
+    stage: 0, stag: 0, kick: 0, enraged: false, er: 0 });
 }
-function setBossFlash(b, v) { for (const m of b.flashMats) m.emissive.setRGB(v, v, v); }
+function setBossFlash(b, v) { for (const m of b.flashMats) m.emissive.setRGB(v + b.er, v, v); }
+function hideTele(b) { b.spOn = false; if (b.tele) { b.tele[0].visible = false; b.tele[1].visible = false; } }
+// every 3rd attack is a telegraphed area slam on one lane third: col = decal colour, p = particle colours, rock = particles fall from above
+const BOSS_FX = {
+  orc: { col: 0xff3b2e, p: [0xd9cdb8, 0xff6a4a], rock: false, up: 2 },     // shockwave
+  sand: { col: 0xff9a2a, p: [0xe8c27a, 0xc99a4a], rock: false, up: 5 },    // sand burst
+  yeti: { col: 0x46c8ff, p: [0xcdf3ff, 0x6fd6ff], rock: false, up: 7 },    // ice spikes
+  demon: { col: 0xff1f4d, p: [0xff7a1a, 0xffd23a], rock: false, up: 6 },   // fire pool
+  gorilla: { col: 0xd9402e, p: [0x8a7a66, 0x5c5246], rock: true, up: -5 }, // rock fall
+};
+function bossCycle(b, A, rage) {
+  b.nAtk++; b.hitDone = false;
+  b.special = b.nAtk % 3 === 0;
+  b.atkT = b.special ? Math.max(A.T * rage, 1.7) : A.T * rage;
+  if (b.special) {
+    const side = Math.abs(squad.x) > 0.8 ? Math.sign(squad.x) : (Math.random() < 0.5 ? -1 : 1);
+    b.spX = side * 3.0; b.spZ = squad.z - 0.4; b.spRx = 2.2; b.spRz = 3.4; b.spOn = true;
+    sfx.play('hit');
+  } else hideTele(b);
+}
+function teleUpdate(b, dt) {
+  const hitAt = 0.56 * b.atkT;
+  b.spRem = Math.max(0, hitAt - b.atk);
+  const pr = clamp(b.atk / hitAt, 0, 1), fx = BOSS_FX[b.kind] || BOSS_FX.orc;
+  const pulse = 0.5 + 0.5 * Math.sin(b.t * 16);
+  for (let i = 0; i < 2; i++) {
+    const m = b.tele[i], k = i ? 0.15 + 0.85 * pr : 1;
+    m.visible = true; m.position.set(b.spX, 0.07 + i * 0.01, b.spZ); m.scale.set(b.spRx * k, 1, b.spRz * k);
+    m.material.opacity = i ? 0.45 + 0.35 * pr : 0.6 + 0.4 * pulse;
+  }
+  b.fxAcc -= dt;
+  if (b.fxAcc <= 0) { // flavour particles along the ring edge
+    b.fxAcc = 0.05;
+    const a = Math.random() * 6.283, x = b.spX + Math.cos(a) * b.spRx, z = b.spZ + Math.sin(a) * b.spRz;
+    burst(x, fx.rock ? 7 : 0.15, z, fx.p[(Math.random() * 2) | 0], 2, 0.8, fx.rock ? 1.3 : 0.9, fx.rock ? 22 : 4, fx.rock ? -2 : 2.5 + fx.up * 0.3);
+  }
+}
+function bossSpecialHit(b, A) {
+  const fx = BOSS_FX[b.kind] || BOSS_FX.orc;
+  S.shake = 1.1; sfx.play('slam'); sfx.play('break'); vibrate(90);
+  for (let i = 0; i < 2; i++) burst(b.spX, fx.rock ? 5 : 0.3, b.spZ, fx.p[i], 18, 7, 1.7, fx.rock ? 24 : 16, fx.rock ? -3 : fx.up + 2);
+  burst(b.spX, 0.2, b.spZ, 0xffffff, 6, 9, 0.8, 20, 1);
+  S.cause = 'boss';
+  const k = Math.max(1, Math.round(A.base * Math.min(1, S.count / 50) + A.pct * S.count)), cap = Math.max(4, Math.round(k * 2.6));
+  let killed = 0;
+  for (let i = squad.sold.length - 1; i >= 0 && killed < cap; i--) {
+    const s = squad.sold[i], dx = (s.x - b.spX) / b.spRx, dz = (s.z - b.spZ) / b.spRz;
+    if (dx * dx + dz * dz < 1) { killSoldier(i); killed++; if (S.state !== 'play' && S.state !== 'boss') break; }
+  }
+  hideTele(b);
+}
 
 function updateBoss(dt) {
   const b = LV.boss;
   b.t += dt;
-  if (b.flash > 0) { b.flash = Math.max(0, b.flash - dt * 8); setBossFlash(b, b.flash * 0.1); }
+  if (b.flash > 0 || b.enraged) { // hit flash (white) + enrage glow (pulsing red)
+    b.flash = Math.max(0, b.flash - dt * 8);
+    b.er = b.enraged ? 0.3 + 0.15 * Math.sin(b.t * 9) : 0;
+    setBossFlash(b, b.flash * 0.1);
+  }
+  if (b.kick > 0) b.kick = Math.max(0, b.kick - dt * 3.5);
   if (b.state === 'idle') {
     b.armR.rotation.x = 0.15 + Math.sin(b.t * 2) * 0.05;
     b.body.position.y = Math.sin(b.t * 2) * 0.05;
     return;
   }
   if (b.state === 'dead') {
+    hideTele(b);
     b.group.rotation.x = Math.min(1.5, b.group.rotation.x + dt * 2.2);
     b.group.position.y = -Math.max(0, b.t - 0.6) * 2;
     if (b.t > 0.55 && !b.boomed) { b.boomed = true; S.shake = 1; sfx.play('slam'); pulse('bad'); burst(b.x, 1, b.z + 2, 0xd8343f, 40, 9, 2.2, 16, 9); }
@@ -864,19 +976,31 @@ function updateBoss(dt) {
   const reach = 3.0 * b.s + 0.4;
   b.x = lerp(b.x, squad.x, Math.min(1, dt * 0.8));
   b.group.position.x = b.x;
+  if (b.enraged) b.group.scale.setScalar(b.s * (1.04 + 0.02 * Math.sin(b.t * 10)));
+  if (b.stag > 0) { // staggered: roars with both arms up, no attacks
+    b.stag -= dt;
+    b.armL.rotation.x = b.armR.rotation.x = -2.5 + Math.sin(b.t * 30) * 0.08;
+    b.body.rotation.x = -0.28; b.body.position.y = 0;
+    b.group.position.z = b.z + b.kick * 0.35;
+    return;
+  }
   if (b.state === 'walk') {
+    b.body.rotation.x = -b.kick * 0.2;
     if (b.z - squad.z > reach) {
       b.z -= 2.6 * dt;
       const w = Math.sin(b.t * 5);
       b.legL.rotation.x = w * 0.5; b.legR.rotation.x = -w * 0.5;
       b.armL.rotation.x = -w * 0.35; b.armR.rotation.x = 0.2 + w * 0.2;
       b.body.position.y = Math.abs(w) * 0.12;
-    } else { b.state = 'attack'; b.atk = 0; b.hitDone = false; }
+    } else { b.state = 'attack'; b.atk = 0; b.hitDone = false; b.needCycle = true; }
   } else if (b.state === 'attack') {
-    if (b.z - squad.z > reach + 1.5) b.state = 'walk';
+    if (b.z - squad.z > reach + 1.5) { b.state = 'walk'; hideTele(b); }
+    const A = bossAtk(b), rage = b.enraged ? 0.7 : 1;
+    if (b.needCycle) { b.needCycle = false; b.atk = 0; bossCycle(b, A, rage); }
     b.atk += dt;
-    const A = bossAtk(b), T = A.T, p = (b.atk % T) / T;
-    if (b.atk >= T) { b.atk -= T; b.hitDone = false; }
+    if (b.atk >= b.atkT) { b.atk -= b.atkT; bossCycle(b, A, rage); }
+    const p = b.atk / b.atkT;
+    if (b.special) teleUpdate(b, dt);
     let th;
     if (p < 0.45) th = lerp(0.2, 2.7, ease(p / 0.45));
     else if (p < 0.56) th = lerp(2.7, -0.95, (p - 0.45) / 0.11);
@@ -884,8 +1008,9 @@ function updateBoss(dt) {
     b.armR.rotation.x = th;
     b.armL.rotation.x = -th * 0.25;
     b.legL.rotation.x = b.legR.rotation.x = 0;
-    b.body.rotation.x = p > 0.45 && p < 0.7 ? 0.12 : 0;
-    if (p >= 0.56 && !b.hitDone) {
+    b.body.rotation.x = (p > 0.45 && p < 0.7 ? 0.12 : 0) - b.kick * 0.2;
+    if (p >= 0.56 && !b.hitDone && b.special) { b.hitDone = true; bossSpecialHit(b, A); }
+    else if (p >= 0.56 && !b.hitDone) {
       b.hitDone = true;
       S.shake = 0.8;
       sfx.play('slam'); vibrate(60);
@@ -895,7 +1020,19 @@ function updateBoss(dt) {
       for (let n = 0; n < k && S.count > 0; n++) killFront();
     }
   }
-  b.group.position.z = b.z;
+  b.group.position.z = b.z + b.kick * 0.35;
+}
+
+function bossStagger(b, stage) {
+  b.stage = stage; b.stag = 0.9; b.needCycle = true; b.hitDone = true; b.special = false; hideTele(b);
+  S.shake = 1; sfx.play('bad'); sfx.play('slam'); vibrate(80);
+  burst(b.x, 3 * b.s, b.z - 1, 0xffffff, 14, 6, 1.1, 8, 3);
+  if (stage === 2) {
+    b.enraged = true;
+    $('bossBar').querySelector('.bn').textContent = b.name + ' · ÖFKE';
+    toast('ÖFKE!', true);
+    burst(b.x, 2 * b.s, b.z - 1, 0xff2a1a, 24, 8, 1.4, 6, 4);
+  }
 }
 
 function hitBoss(dmg, bx) {
@@ -903,14 +1040,18 @@ function hitBoss(dmg, bx) {
   if (b.state === 'dead') return; // bullets still in flight after the kill
   b.hp -= dmg;
   b.flash = 1;
+  if (S.weapon >= 3) b.kick = Math.min(1, b.kick + (S.weapon >= 4 ? 0.45 : 0.2)); // heavy hits (plasma / rockets) shove the boss back
   if (Math.random() < 0.3) burst(bx, 1.5 + Math.random() * 3 * b.s, b.z - 1, 0xffd36b, 2, 3, 0.7, 10, 2);
   if (b.hp <= 0 && b.state !== 'dead') {
-    b.hp = 0; b.state = 'dead'; b.t = 0;
+    b.hp = 0; b.state = 'dead'; b.t = 0; b.enraged = false; b.er = 0; b.kick = 0; b.stag = 0;
+    b.group.scale.setScalar(b.s);
     setBossFlash(b, 0);
     sfx.play('break');
     S.state = 'win'; S.endT = 0;
     $('bossBar').classList.add('hidden');
   }
+  else if (b.hp <= b.max * 0.25 && b.stage < 2) bossStagger(b, 2);
+  else if (b.hp <= b.max * 0.5 && b.stage < 1) bossStagger(b, 1);
   updateBossBar();
 }
 function updateBossBar() {
@@ -930,6 +1071,7 @@ function syncSquad(instant) {
   while (squad.sold.length > want) {
     const s = squad.sold.pop();
     burst(s.x, 0.6, s.z, 0x2f8cff, 3, 3, 0.8);
+    pTroop.spawnFall(s.x, s.z, 0, -1, s.k);
   }
   squadLabel.set(S.count);
 }
@@ -947,6 +1089,7 @@ function killSoldier(i) {
   const s = squad.sold[i];
   if (!s) return;
   burst(s.x, 0.6, s.z, 0x2f8cff, 4, 3.5, 0.85);
+  pTroop.spawnFall(s.x, s.z, 0, -1, s.k);
   squad.sold.splice(i, 1);
   S.count--;
   S.deaths[S.cause] = (S.deaths[S.cause] || 0) + 1;
@@ -961,7 +1104,7 @@ function killFront() {
 }
 function killEnemy(g, i) {
   const s = g.sold[i];
-  if (s) { burst(s.x, 0.6, s.z, 0xff4650, 4, 3.5, 0.85); g.sold.splice(i, 1); }
+  if (s) { burst(s.x, 0.6, s.z, 0xff4650, 4, 3.5, 0.85); g.troop.spawnFall(s.x, s.z, Math.PI, 1, s.k); g.sold.splice(i, 1); }
   g.count--;
   sfx.play('pop');
   if (g.count <= 0) {
@@ -1580,6 +1723,7 @@ function lose() {
   pulse('bad');
   $('loseSub').textContent = LV.boss.state !== 'idle' ? LV.boss.name + ' çok güçlüydü!' : 'Ordun dağıldı!';
   $('bossBar').classList.add('hidden');
+  hideTele(LV.boss);
 }
 function finishWin() {
   const L = LV.L;
@@ -1598,8 +1742,13 @@ function finishWin() {
 }
 
 // ============================================================ render helpers
-function drawTroops() {
+let fightFx = 0, fightN = 0;
+function drawTroops(dt) {
   const t = S.t;
+  // melee: front rows lunge at each other and swing (lean) their weapons; dust + sparks at the contact line
+  const fighting = S.fight && S.fight.alive && S.fight.state === 'fight' && (S.state === 'play' || S.state === 'boss');
+  let ourFront = -1e9;
+  if (fighting) for (const s of squad.sold) if (s.z > ourFront) ourFront = s.z;
   const running = S.state === 'play';
   const cheering = S.state === 'win' && LV.boss.state === 'dead' && LV.boss.t > 0.8;
   pTroop.begin();
@@ -1610,7 +1759,10 @@ function drawTroops() {
     if (running) { const p = Math.sin(t * 14 + s.ph); y = Math.abs(p) * 0.07; sw = p * 0.7; }
     else if (cheering) { y = Math.abs(Math.sin(t * 7 + s.ph)) * 0.55; sw = 0.3; }
     else y = Math.sin(t * 3 + s.ph) * 0.015 + 0.015;
-    pTroop.push(s.x, y, s.z, 0, sw, s.k);
+    if (fighting && s.z > ourFront - 1.0) { // front row of our army
+      const a = Math.max(0, Math.sin(t * 12 + s.ph * 3));
+      pTroop.push(s.x, y, s.z, 0, 0, s.k, a * 0.5, a * 0.28);
+    } else pTroop.push(s.x, y, s.z, 0, sw, s.k);
   }
   if (stairs) stairsDrawStayers(pTroop, t); // BONUS: soldiers left behind on the steps
   pTroop.end();
@@ -1621,14 +1773,32 @@ function drawTroops() {
     if (dz > 90 || dz < -14) { g.label.sprite.visible = false; continue; }
     const run = g.state === 'charge' || g.state === 'fight' || g.state === 'advance';
     const sp = g.state === 'advance' ? 7 : 14;
+    let eFront = 1e9;
+    const brawl = fighting && g.state === 'fight';
+    if (brawl) {
+      for (const s of g.sold) if (s.z < eFront) eFront = s.z;
+      if (fightFx <= 0 && ourFront > -1e8) { // contact-line fx (throttled, shared across groups)
+        fightFx = 0.09; fightN++;
+        const cz = (ourFront + eFront) * 0.5, cx = squad.x + (Math.random() - 0.5) * Math.min(3, dims(S.count).hw * 2);
+        burst(cx, 0.3, cz, 0xd9cdb8, 2, 2.6, 0.8, 9, 1.4);
+        if (fightN % 3 === 0) burst(cx, 0.9, cz, 0xffe27a, 2, 3.5, 0.45, 6, 1);
+      }
+    }
     for (const s of g.sold) {
       const p = Math.sin(t * (run ? sp : 3) + s.ph);
+      if (brawl && s.z < eFront + 1.0) { // front row of the enemy group
+        const a = Math.max(0, Math.sin(t * 12 + s.ph * 3 + 1.7));
+        g.troop.push(s.x, 0, s.z, Math.PI, 0, s.k, a * 0.55, -a * 0.28);
+        continue;
+      }
       g.troop.push(s.x, run ? Math.abs(p) * 0.07 : 0.015 + p * 0.015, s.z, Math.PI, run ? p * 0.7 : 0, s.k);
     }
     g.label.sprite.visible = true;
     g.label.place(g.x, 2.0, g.z);
   }
-  for (const k in ETROOPS) ETROOPS[k].end();
+  for (const k in ETROOPS) { ETROOPS[k].end(); ETROOPS[k].updateFall(dt); }
+  pTroop.updateFall(dt);
+  fightFx -= dt;
   const d = dims(S.count);
   squadLabel.sprite.visible = S.count > 0;
   squadLabel.place(squad.x, 2.0, squad.z - Math.min(d.depth, 3) * 0.5);
@@ -1711,7 +1881,7 @@ function update(dt) {
   }
   bonusTick(dt); // BONUS: gems
   updateParticles(dt);
-  drawTroops();
+  drawTroops(dt);
   flushLabels();
   updateCamera(dt);
   updateWeather(dt);

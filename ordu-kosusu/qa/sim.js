@@ -48,6 +48,9 @@ const SIM = (opts) => {
           if (opts.human && c.t < 0.35) continue;
           sc += 14 * ov(x + (q.x - x) * Math.exp(-12 * rem), [c.x - c.r - 0.2, c.x + c.r + 0.2]);
         }
+        // boss area slam: the red ring is telegraphed ~1 s ahead, step out of it (human-ish bot reacts after 0.35 s)
+        const bs0 = LV.boss;
+        if (bs0.spOn && !(opts.human && bs0.spRem > 0.6)) sc += 14 * ov(x + (q.x - x) * Math.exp(-12 * bs0.spRem), [bs0.spX - bs0.spRx - 0.2, bs0.spX + bs0.spRx + 0.2]);
         // mud: slows the march, avoid when there's a free lane
         for (const m of LV.muds || []) if (m.z + m.depth / 2 > q.z - 1 && m.z - m.depth / 2 - q.z < 14) for (const tl of m.tiles) sc += 2 * ov(x, [tl.x - 1.6, tl.x + 1.6]);
         for (const hz of haz) {
