@@ -471,3 +471,46 @@ export const ENEMY_LEGS = {
 };
 export const buildEnemy = (type) => mirrorX(merge(ENEMY_MODELS[type]()));
 export const buildEnemyLeg = (type) => { const l = ENEMY_LEGS[type]; return buildLeg(l[0], l[1], l[2], l[3]); };
+
+// ------------------------------------------------------------ LOD (QA/perf): low-poly stand-ins for far instances
+// ~250 verts instead of ~2-4K. Colours are averaged from the full model in height bands, so they
+// follow art changes automatically. Feet at y=0, facing +z like the full body (legs are static).
+// dominant (largest surface area) colour of the triangles whose centre lies in the box y0..y1, |x|<xmax
+function bandColor(geo, y0, y1, xmax, fallback, top = false) {
+  const p = geo.attributes.position.array, c = geo.attributes.color && geo.attributes.color.array;
+  if (!c) return fallback;
+  const idx = geo.index ? geo.index.array : null, nt = (idx ? idx.length : p.length / 3) / 3;
+  const area = new Map(), A = new THREE.Vector3(), B = new THREE.Vector3(), Cc = new THREE.Vector3();
+  let best = fallback, bestY = -1e9;
+  for (let t = 0; t < nt; t++) {
+    const a = idx ? idx[t * 3] : t * 3, b = idx ? idx[t * 3 + 1] : t * 3 + 1, d = idx ? idx[t * 3 + 2] : t * 3 + 2;
+    A.fromArray(p, a * 3); B.fromArray(p, b * 3); Cc.fromArray(p, d * 3);
+    const cy = (A.y + B.y + Cc.y) / 3, cx = (A.x + B.x + Cc.x) / 3;
+    if (cy < y0 || cy >= y1 || Math.abs(cx) > xmax) continue;
+    const key = new THREE.Color(Math.min(1, c[a * 3]), Math.min(1, c[a * 3 + 1]), Math.min(1, c[a * 3 + 2])).getHex();
+    if (top) { if (cy > bestY) { bestY = cy; best = key; } continue; }
+    const ar = B.sub(A).cross(Cc.sub(A)).length();
+    area.set(key, (area.get(key) || 0) + ar);
+  }
+  if (top) return best;
+  let bv = 0;
+  for (const [k, v] of area) if (v > bv) { bv = v; best = k; }
+  return best;
+}
+function lodFrom(full, pants, boot, gun) {
+  const torsoC = bandColor(full, 0.5, 0.85, 0.3, 0x2f8cff), faceC = bandColor(full, 0.86, 0.97, 0.3, SKIN), hatC = bandColor(full, 1.0, 1.5, 0.2, faceC);
+  full.dispose();
+  const p = [
+    box(0.1, 0.36, 0.12, -0.075, 0.24, 0, pants), box(0.1, 0.36, 0.12, 0.075, 0.24, 0, pants),
+    box(0.12, 0.08, 0.2, -0.075, 0.04, 0.03, boot), box(0.12, 0.08, 0.2, 0.075, 0.04, 0.03, boot),
+    cyl(0.15, 0.155, 0.46, 0, 0.63, 0, torsoC, 7, 0, 0, 0.8),
+    box(0.3, 0.08, 0.2, 0, 0.74, 0.1, torsoC),
+    ball(0.135, 0, 0.955, 0, faceC, 7, 5),
+    dome(0.15, 0, 0.99, 0, hatC, 7, 3),
+  ];
+  if (gun) p.push(box(0.06, 0.08, gun[1], -0.07, 0.735, 0.12 + gun[1] / 2, gun[0]));
+  return merge(p);
+}
+const LOD_GUN = [[0x3b3f4a, 0.3], [0x7a4f2a, 0.45], [0x23262e, 0.5], [0x1d9bf0, 0.52], [0x41663a, 0.6]];
+export const buildSoldierLOD = (t) => lodFrom(buildSoldier(t), SOLDIER_LEGS[t][0], SOLDIER_LEGS[t][1], LOD_GUN[t]);
+export const buildEnemyLOD = (type) => lodFrom(buildEnemy(type), ENEMY_LEGS[type][0], ENEMY_LEGS[type][1], null);
