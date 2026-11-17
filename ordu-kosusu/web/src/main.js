@@ -15,7 +15,11 @@ const $ = (id) => document.getElementById(id);
 // ============================================================ save data
 const SAVE_KEY = 'ordu_kosusu_save_v1';
 function loadSave() { try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (e) { return {}; } }
-const save = Object.assign({ level: 1, coins: 0, upStart: 0, upRate: 0, upDmg: 0, sound: true, vibe: true, eco: false }, loadSave());
+const SAVE0 = { level: 1, coins: 0, upStart: 0, upRate: 0, upDmg: 0, sound: true, vibe: true, eco: false };
+const save = Object.assign({}, SAVE0, loadSave());
+// a corrupt/foreign value (NaN level -> genLevel throws) must not brick the game at boot
+for (const k in SAVE0) if (typeof save[k] !== typeof SAVE0[k] || (typeof save[k] === 'number' && !(isFinite(save[k]) && save[k] >= 0))) save[k] = SAVE0[k];
+save.level = Math.max(1, Math.floor(save.level));
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* ignore */ } }
 
 const UPG = { upStart: { base: 40, max: 40 }, upRate: { base: 55, max: 30 }, upDmg: { base: 55, max: 30 } };
@@ -78,7 +82,9 @@ const container = $('game');
 const renderer = new THREE.WebGLRenderer({ antialias: true, stencil: false, powerPreference: 'default' });
 container.appendChild(renderer.domElement);
 setMaxAniso(renderer.capabilities.getMaxAnisotropy());
+let needRender = true; // a resize clears the canvas, so draw once even while paused
 function applyQuality() {
+  needRender = true;
   renderer.setPixelRatio(save.eco ? 1 : Math.min(window.devicePixelRatio || 1, 1.75));
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
@@ -220,8 +226,11 @@ class Troop {
     wLeg(this.legR.instanceMatrix.array, o, c, s, cb, -sb, x + c * hx, hy, z - s * hx, k);
   }
   end() {
+    const vis = this.n > 0;
     for (const m of this.meshes) {
       m.count = this.n;
+      m.visible = vis; // count-0 instanced meshes still cost a draw setup each frame
+      if (!vis) continue;
       m.instanceMatrix.clearUpdateRanges();
       m.instanceMatrix.addUpdateRange(0, Math.max(1, this.n) * 16);
       m.instanceMatrix.needsUpdate = true;
@@ -298,12 +307,18 @@ function updateParticles(dt) {
     top = i + 1;
   }
   P.top = top;
-  P.mesh.count = top;
-  if (top) P.mesh.instanceMatrix.needsUpdate = true;
+  flushInst(P.mesh, top);
   if (colorDirty && P.mesh.instanceColor) { P.mesh.instanceColor.needsUpdate = true; colorDirty = false; }
 }
 
 // ============================================================ bullets (ours and theirs)
+// upload only the first n instances (instead of the whole pool) and hide the mesh when empty
+function flushInst(mesh, n) {
+  mesh.count = n; mesh.visible = n > 0;
+  if (!n) return;
+  const im = mesh.instanceMatrix;
+  im.clearUpdateRanges(); im.addUpdateRange(0, n * 16); im.needsUpdate = true;
+}
 function bulletPool(n, geo, mat) {
   const p = {
     n, x: new Float32Array(n), y: new Float32Array(n), z: new Float32Array(n), vx: new Float32Array(n), vz: new Float32Array(n),
@@ -325,6 +340,9 @@ function spawnIn(p, x, y, z, vx, vz, dmg, life) {
 function clearBullets() { B.top = 0; B.life.fill(0); EB.top = 0; EB.life.fill(0); B.mesh.count = 0; EB.mesh.count = 0; }
 
 // ============================================================ labels
+// canvas labels are repainted at most once per frame (a fight changes them many times per frame)
+const dirtyLabels = new Set();
+function flushLabels() { for (const l of dirtyLabels) l.paint(); dirtyLabels.clear(); }
 class CountLabel {
   constructor(color, dark) {
     this.c = makeCanvas(256, 128); this.ctx = this.c.getContext('2d');
@@ -339,7 +357,10 @@ class CountLabel {
     v = Math.max(0, Math.round(v));
     if (v === this.val) return;
     this.val = v;
-    const x = this.ctx, t = fmt(v);
+    dirtyLabels.add(this);
+  }
+  paint() {
+    const x = this.ctx, t = fmt(this.val);
     x.clearRect(0, 0, 256, 128);
     x.font = `900 76px ${FONT}`;
     const w = Math.min(244, Math.max(120, x.measureText(t).width + 60));
@@ -348,7 +369,7 @@ class CountLabel {
     strokeText(x, t, 128, 62, 76, '#ffffff', 'rgba(0,0,0,.18)', 6);
     this.tex.needsUpdate = true;
   }
-  dispose() { scene.remove(this.sprite); this.tex.dispose(); this.sprite.material.dispose(); }
+  dispose() { dirtyLabels.delete(this); scene.remove(this.sprite); this.tex.dispose(); this.sprite.material.dispose(); }
 }
 const squadLabel = new CountLabel('#2f8cff', '#1b5fd1');
 
@@ -377,6 +398,10 @@ class BlockLabel {
     const b = this.b, hp = Math.ceil(Math.max(0, b.hp));
     if (hp === this.val && !force) return;
     this.val = hp;
+    dirtyLabels.add(this);
+  }
+  paint() {
+    const b = this.b, hp = this.val;
     const x = this.ctx, W = this.c.width, H = this.c.height;
     x.clearRect(0, 0, W, H);
     if (b.kind === 'wall') {
@@ -418,11 +443,14 @@ function resetWeather() {
 }
 function updateWeather(dt) {
   if (!weather.visible) return;
-  const cx = camera.position.x, cz = camera.position.z, snow = weatherKind === 'snow';
+  const cx = camera.position.x, cz = camera.position.z, snow = weatherKind === 'snow', ff = weatherKind === 'fireflies';
   for (let i = 0; i < WN; i++) {
     const o = i * 3;
     if (snow) { wPos[o + 1] -= (1.4 + (i % 5) * 0.25) * dt; wPos[o] += Math.sin(S.t * 1.3 + i) * 0.5 * dt; if (wPos[o + 1] < 0) wPos[o + 1] += 18; }
-    else { wPos[o + 1] += (1.0 + (i % 4) * 0.4) * dt; wPos[o] += Math.sin(S.t * 2 + i) * 0.3 * dt; if (wPos[o + 1] > 14) wPos[o + 1] -= 14; }
+    else if (ff) { // fireflies: slow low wandering
+      wPos[o] += Math.sin(S.t * 0.9 + i * 1.7) * 0.9 * dt; wPos[o + 2] += Math.cos(S.t * 0.7 + i * 2.3) * 0.9 * dt;
+      wPos[o + 1] += Math.sin(S.t * 1.6 + i * 0.37) * 0.6 * dt; if (wPos[o + 1] > 5.5) wPos[o + 1] -= 5; else if (wPos[o + 1] < 0.3) wPos[o + 1] += 0.5;
+    } else { wPos[o + 1] += (1.0 + (i % 4) * 0.4) * dt; wPos[o] += Math.sin(S.t * 2 + i) * 0.3 * dt; if (wPos[o + 1] > 14) wPos[o + 1] -= 14; }
     if (wPos[o + 2] < cz - 4) wPos[o + 2] += 64; else if (wPos[o + 2] > cz + 60) wPos[o + 2] -= 64;
     if (wPos[o] < cx - 22) wPos[o] += 44; else if (wPos[o] > cx + 22) wPos[o] -= 44;
   }
@@ -450,6 +478,7 @@ function applyTheme(th) {
   weather.visible = !!th.weather;
   if (th.weather === 'snow') { wMat.color.setHex(0xffffff); wMat.size = 0.24; wMat.blending = THREE.NormalBlending; }
   else if (th.weather === 'embers') { wMat.color.setHex(0xff9a3c); wMat.size = 0.18; wMat.blending = THREE.AdditiveBlending; }
+  else if (th.weather === 'fireflies') { wMat.color.setHex(0xc8ff5a); wMat.size = 0.22; wMat.blending = THREE.AdditiveBlending; }
   wMat.needsUpdate = true;
   resetWeather();
   document.body.style.background = '#' + th.skyBot.toString(16).padStart(6, '0');
@@ -665,9 +694,11 @@ function buildLevel(L) {
   armObjects();
   camera.position.set(0, 7, -8);
   camLook.set(0, 0.8, 4);
+  if (weather.visible) resetWeather(); // around the new camera, not the old level's end
 }
 
 function disposeLevel() {
+  for (const l of dirtyLabels) if (l !== squadLabel) dirtyLabels.delete(l);
   for (const g of LV.enemies) g.label.dispose();
   for (const g of LV.gates) for (const p of g.panels) if (p.material.map) p.material.map.dispose();
   for (const o of LV.own) if (o.dispose) o.dispose();
@@ -705,13 +736,25 @@ function armObjects() {
     g.armed = true;
     g.count = Math.max(3, Math.min(600, Math.round(S.count * Math.min(g.f, 1.25) * (g.T.shoots ? 0.7 : 1))));
     // one enemy takes about 1.5 s (x type toughness) of a single soldier's fire
-    g.hp = Math.sqrt(g.T.hp) * LV.hpMul * refPS(g.z) * 1.1;
+    g.hp = Math.max(0.05, Math.sqrt(g.T.hp) * LV.hpMul * refPS(g.z) * 1.1); // hp 0 -> pool NaN
     const dE = dims(g.count);
     g.x = g.xr * Math.max(0, HALF - 0.4 - dE.hw);
     syncGroup(g, true);
     g.label.sprite.visible = true;
   }
   armTraps(lim);
+}
+
+// menu upgrades change the army after the first objects were armed: size them again
+function rearmObjects() {
+  for (const g of LV.gates) {
+    if (!g.armed) continue;
+    g.armed = false; g.ops = null;
+    for (const p of g.panels) { if (p.material.map) p.material.map.dispose(); p.material.map = null; p.visible = false; }
+  }
+  for (const b of LV.blocks) b.armed = false;
+  for (const g of LV.enemies) if (g.armed) { g.armed = false; g.sold.length = 0; }
+  armObjects();
 }
 
 // ============================================================ boss
@@ -790,6 +833,7 @@ function updateBoss(dt) {
 
 function hitBoss(dmg, bx) {
   const b = LV.boss;
+  if (b.state === 'dead') return; // bullets still in flight after the kill
   b.hp -= dmg;
   b.flash = 1;
   if (Math.random() < 0.3) burst(bx, 1.5 + Math.random() * 3 * b.s, b.z - 1, 0xffd36b, 2, 3, 0.7, 10, 2);
@@ -896,7 +940,8 @@ function blockDestroyed(b, reward) {
   const col = b.kind === 'wall' ? 0xf47a40 : 0xd99a55;
   burst(b.x, 0.8, b.z, col, b.kind === 'wall' ? 26 : 18, 6, 1.6, 18, 6);
   sfx.play('break'); vibrate(25);
-  if (!reward) return;
+  // stray bullets after a loss must not hand out soldiers/weapons (would revive the army)
+  if (!reward || (S.state !== 'play' && S.state !== 'boss')) return;
   if (b.kind === 'weapon') {
     const tier = Math.min(S.weapon + 1, WEAPONS.length - 1);
     if (tier > S.weapon) {
@@ -952,8 +997,11 @@ function updateGroups(dt) {
     if ((g.state === 'charge' || g.state === 'advance') && g.z - squad.z < 0.8 && g.z - squad.z > -dP.depth - 1 && Math.abs(g.x - squad.x) < dP.hw + dE.hw) {
       g.state = 'fight'; S.fight = g;
     }
+    // dodged groups that ran past the army: retire them once out of view (no more updates/draws)
+    if (g.state !== 'fight' && dz < -dP.depth - 14) { g.alive = false; g.sold.length = 0; g.label.sprite.visible = false; continue; }
     g.x = clamp(g.x, -(HALF - 0.4 - dE.hw), HALF - 0.4 - dE.hw);
     if (g.state === 'fight') {
+      if (S.count > 0) S.fight = g; // keep the army slowed while any group is still fighting (two groups can overlap)
       g.z = lerp(g.z, squad.z + 0.6, Math.min(1, dt * 4));
       g.x = lerp(g.x, squad.x, Math.min(1, dt * 3));
       g.fightAcc += dt * (12 + Math.min(S.count, g.count) * 1.7);
@@ -1020,8 +1068,7 @@ function updateEnemyFire(dt) {
     wRy(a, o, EB.vz[i] / l, EB.vx[i] / l, bx, EB.y[i], bz, 1);
     drawn++;
   }
-  EB.mesh.count = drawn;
-  if (drawn) EB.mesh.instanceMatrix.needsUpdate = true;
+  flushInst(EB.mesh, drawn);
 }
 
 function updateObstacles(dt) {
@@ -1140,14 +1187,28 @@ function trapGeo() {
   const rock = mergeGeometries([F(new THREE.DodecahedronGeometry(ROLL_R + 0.05), 0x4a3530),
     F(new THREE.IcosahedronGeometry(0.2, 0).translate(0.5, 0.25, 0.3), 0xff7a1a),
     F(new THREE.IcosahedronGeometry(0.18, 0).translate(-0.45, -0.2, 0.42), 0xffc23a)]);
+  const log = mergeGeometries([
+    F(new THREE.CylinderGeometry(ROLL_R, ROLL_R, 1.45, 12).rotateZ(Math.PI / 2), 0x6b4a2f),
+    F(new THREE.CylinderGeometry(ROLL_R - 0.12, ROLL_R - 0.12, 1.47, 12).rotateZ(Math.PI / 2), 0xc89a5e),
+    F(new THREE.CylinderGeometry(ROLL_R + 0.03, ROLL_R + 0.03, 0.3, 12).rotateZ(Math.PI / 2).translate(-0.25, 0, 0), 0x3f8f2f),
+    F(new THREE.ConeGeometry(0.1, 0.35, 5).rotateZ(-0.6).translate(0.35, ROLL_R + 0.08, 0), 0x4c7a2a),
+  ]);
   TRAPG = { frame: mergeGeometries(frame), arm: mergeGeometries(arm), cones: mergeGeometries(cones), tileFrame: mergeGeometries(tileFrame),
-    plate: new THREE.BoxGeometry(SPIKE_W, 0.07, 2.0).translate(0, 0.035, 0), barrel, snow, rock };
+    plate: new THREE.BoxGeometry(SPIKE_W, 0.07, 2.0).translate(0, 0.035, 0), barrel, snow, rock, log };
+  TRAPG.coconut = mergeGeometries([F(new THREE.IcosahedronGeometry(0.42, 1), 0x6b4423),
+    F(new THREE.IcosahedronGeometry(0.4, 1).translate(0.38, 0.12, 0.1), 0x5a3a1e),
+    F(new THREE.ConeGeometry(0.12, 0.3, 5).translate(0.1, 0.5, 0), 0x3f8f2f)]);
+  TRAPG.ring = new THREE.RingGeometry(0.82, 1.15, 28).rotateX(-Math.PI / 2);
+  TRAPG.disc = new THREE.CircleGeometry(0.82, 24).rotateX(-Math.PI / 2);
+  const lumps = [F(new THREE.BoxGeometry(SPIKE_W, 0.05, 1).translate(0, 0.025, 0), 0x5b3a1e)];
+  for (let i = 0; i < 5; i++) lumps.push(F(new THREE.SphereGeometry(0.22, 7, 4).scale(1.4, 0.35, 0.8).translate(-1.2 + i * 0.6, 0.05, (i % 2 ? 0.25 : -0.2)), i % 2 ? 0x4a2f17 : 0x6e4826));
+  TRAPG.mud = mergeGeometries(lumps);
   return TRAPG;
 }
 
 function buildTraps(spec, grp, keep, th) {
   const TG = trapGeo();
-  LV.hammers = []; LV.spikes = []; LV.rollers = [];
+  LV.hammers = []; LV.spikes = []; LV.rollers = []; LV.drops = []; LV.muds = []; LV.trapSpeed = spec.speed;
   for (const hs of spec.hammers || []) {
     const frame = new THREE.Mesh(TG.frame, MAT.decor); frame.position.set(0, 0, hs.z); grp.add(frame);
     const arm = new THREE.Mesh(TG.arm, MAT.decor); arm.position.set(hs.cx, HAM_PIV, hs.z); grp.add(arm);
@@ -1164,7 +1225,7 @@ function buildTraps(spec, grp, keep, th) {
     });
     LV.spikes.push({ ...ss, tiles });
   }
-  const rgeo = th.key === 'snow' ? TG.snow : th.key === 'lava' ? TG.rock : TG.barrel;
+  const rgeo = th.key === 'snow' ? TG.snow : th.key === 'lava' ? TG.rock : th.key === 'jungle' ? TG.log : TG.barrel;
   for (const rs of spec.rollers || []) {
     const m = new THREE.Mesh(rgeo, MAT.decor); m.position.set(rs.x, ROLL_R, rs.z); grp.add(m);
     const r = { ...rs, kind: 'roller', w: 1.4, d: 1.4, hp: 1, max: 1, alive: true, armed: false, rolling: false, mesh: m, wob: 0 };
@@ -1175,6 +1236,18 @@ function buildTraps(spec, grp, keep, th) {
     r.sprite = new THREE.Sprite(keep(new THREE.SpriteMaterial({ map: r.label.tex, transparent: true, depthTest: false, fog: false })));
     r.sprite.scale.set(2.0, 1.0, 1); r.sprite.renderOrder = 19; r.sprite.visible = false; grp.add(r.sprite);
     LV.rollers.push(r);
+  }
+  // jungle: falling coconuts (shadow ring warns first) and mud strips
+  for (const ds of spec.drops || []) {
+    const ringMat = keep(new THREE.MeshBasicMaterial({ color: 0xff4650, transparent: true, opacity: 0, depthWrite: false }));
+    const ring = new THREE.Mesh(TG.ring, ringMat); ring.visible = false; grp.add(ring);
+    const disc = new THREE.Mesh(TG.disc, MAT.shadow); disc.visible = false; grp.add(disc);
+    const nut = new THREE.Mesh(TG.coconut, MAT.decor); nut.visible = false; grp.add(nut);
+    LV.drops.push({ ...ds, x: 0, t: 0, state: 'wait', ring, ringMat, disc, nut });
+  }
+  for (const ms of spec.muds || []) {
+    for (const t of ms.tiles) { const m = new THREE.Mesh(TG.mud, MAT.decor); m.scale.z = ms.depth; m.position.set(t.x, 0.005, ms.z); grp.add(m); }
+    LV.muds.push(ms);
   }
 }
 
@@ -1220,11 +1293,51 @@ function animateTraps(dt) {
   }
 }
 
+// coconuts land where the army is heading ~1 s after their shadow appears; mud halves the march speed
+function updateJungleTraps(dt, d) {
+  for (const c of LV.drops) {
+    if (c.state === 'done') continue;
+    if (c.state === 'wait') {
+      // trigger so that the landing happens just as the front rows reach the spot
+      if (squad.z < c.z - squad.speed * c.warn + 1) continue;
+      c.state = 'warn'; c.t = 0;
+      c.x = clamp(squad.x + c.dx, -(HALF - 0.8), HALF - 0.8);
+      c.ring.position.set(c.x, 0.03, c.z); c.disc.position.set(c.x, 0.025, c.z);
+      c.ring.visible = c.disc.visible = true;
+    }
+    c.t += dt;
+    const p = Math.min(1, c.t / c.warn);
+    c.ringMat.opacity = 0.35 + 0.5 * Math.abs(Math.sin(c.t * 14));
+    c.ring.scale.setScalar(0.55 + 0.45 * p); c.disc.scale.setScalar(0.4 + 0.9 * p);
+    const fall = (c.t - (c.warn - 0.4)) / 0.4;
+    if (fall > 0) { c.nut.visible = true; c.nut.position.set(c.x, lerp(10, 0.42, Math.min(1, fall * fall)), c.z); c.nut.rotation.x += dt * 9; }
+    if (c.t < c.warn) continue;
+    c.state = 'done'; c.ring.visible = c.disc.visible = c.nut.visible = false;
+    burst(c.x, 0.5, c.z, 0x6b4423, 14, 5, 1.1, 18, 5); burst(c.x, 0.4, c.z, 0xf4ead2, 6, 3, 0.7, 18, 3);
+    sfx.play('slam'); S.shake = Math.max(S.shake, 0.3);
+    for (let i = squad.sold.length - 1; i >= 0; i--) {
+      const s = squad.sold[i];
+      if (s && (s.x - c.x) * (s.x - c.x) + (s.z - c.z) * (s.z - c.z) < c.r * c.r) {
+        S.cause = 'coconut'; killSoldier(i);
+        if (S.state !== 'play') return;
+      }
+    }
+  }
+  if (LV.muds.length) {
+    const mid = squad.z - Math.min(d.depth, 3) * 0.5;
+    const inMud = LV.muds.some((m) => Math.abs(mid - m.z) < m.depth / 2 && m.tiles.some((t) => Math.abs(squad.x - t.x) < SPIKE_W / 2));
+    squad.speed = LV.trapSpeed * (inMud ? 0.5 : 1);
+    if (inMud && Math.random() < dt * 12) burst(squad.x + (Math.random() - 0.5) * d.hw * 2, 0.15, squad.z, 0x5b3a1e, 1, 2, 0.6, 14, 2);
+  }
+}
+
 function updateTraps(dt) {
   if (!LV.hammers) return;
   animateTraps(dt);
   if (S.state !== 'play') return;
   const d = dims(S.count), front = squad.z + 1.5, back = squad.z - d.depth - 1.5;
+  updateJungleTraps(dt, d);
+  if (S.state !== 'play') return;
   for (const h of LV.hammers) {
     if (h.hy > 1.2) h.hits = 0;                 // each low swing knocks down at most 6 soldiers
     if (h.z > front || h.z < back || h.hy > 1.2 || h.hits >= 6) continue;
@@ -1272,8 +1385,9 @@ function updateTraps(dt) {
   }
 }
 
+const targetList = []; // reused every frame (no per-frame garbage)
 function nearTargets() {
-  const list = [];
+  const list = targetList; list.length = 0;
   const z0 = squad.z - 2, z1 = squad.z + 32;
   for (const b of LV.blocks) if (b.alive && b.armed && b.z > z0 && b.z < z1) list.push(b);
   for (const g of LV.enemies) if (g.alive && g.armed && g.z > z0 && g.z < z1 + 2) list.push(g);
@@ -1347,8 +1461,7 @@ function updateShooting(dt) {
     if (hit) { B.life[i] = 0; continue; }
     wRy(a, drawn++ * 16, B.vz[i] / BULLET_SPEED, B.vx[i] / BULLET_SPEED, bx, B.y[i], z1, bs);
   }
-  B.mesh.count = drawn;
-  if (drawn) B.mesh.instanceMatrix.needsUpdate = true;
+  flushInst(B.mesh, drawn);
 }
 
 function enterBoss() {
@@ -1459,8 +1572,7 @@ function drawTroops() {
       if (dz < -16 || dz > 80) continue;
       wRy(a, n++ * 16, c, s, cn.x, 0.55 + Math.sin(t * 3 + cn.z) * 0.08, cn.z, 1);
     }
-    LV.coinMesh.count = n;
-    LV.coinMesh.instanceMatrix.needsUpdate = true;
+    flushInst(LV.coinMesh, n);
   }
 }
 
@@ -1521,6 +1633,7 @@ function update(dt) {
   bonusTick(dt); // BONUS: gems
   updateParticles(dt);
   drawTroops();
+  flushLabels();
   updateCamera(dt);
   updateWeather(dt);
 }
@@ -1534,13 +1647,19 @@ function frame(now) {
   const dt = Math.min((now - lastT) / 1000, 0.05);
   lastT = now;
   if (!S.paused) update(dt);
+  else if (!needRender) return; // paused: the canvas keeps the last frame, skip GPU work (battery)
+  needRender = false;
   renderer.render(scene, camera);
 }
 function startLoop() { if (running) return; running = true; lastT = performance.now(); rafId = requestAnimationFrame(frame); }
 function stopLoop() { running = false; cancelAnimationFrame(rafId); }
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { stopLoop(); sfx.suspend(); }
-  else { startLoop(); if (save.sound) sfx.unlock(); }
+  if (document.hidden) {
+    stopLoop(); sfx.suspend();
+    // app sent to background mid-run: come back to the pause screen instead of a running fight
+    if ((S.state === 'play' || S.state === 'boss') && !S.paused) openSettings();
+  }
+  else { startLoop(); if (save.sound) { sfx.unlock(); if (S.paused) sfx.stopMusic(); } } // unlock restarts music; keep the pause screen quiet
 });
 
 // ============================================================ UI
@@ -1698,6 +1817,7 @@ document.querySelectorAll('.up').forEach((el) => el.addEventListener('click', (e
   save.coins -= cost; save[k]++; persist();
   sfx.play('upgrade'); vibrate(20);
   if (k === 'upStart') { S.count = startSoldiers(); syncSquad(false); burst(0, 1, 0, 0x8fd0ff, 14, 4, 0.6, 6, 4); }
+  if (S.state === 'menu') rearmObjects();
   refreshMenu();
   el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
 }));
@@ -1714,19 +1834,24 @@ document.querySelectorAll('.tog').forEach((t) => t.addEventListener('click', () 
   sfx.play('click');
   syncToggles();
 }));
-$('btnGear').addEventListener('click', (e) => {
-  e.stopPropagation();
-  sfx.unlock();
+function openSettings() {
   syncToggles();
   $('btnHome').classList.toggle('hidden', S.state === 'menu');
   $('setTitle').textContent = S.state === 'play' || S.state === 'boss' ? 'DURAKLATILDI' : 'AYARLAR';
   sfx.stopMusic();
   $('settings').classList.remove('hidden');
   S.paused = true;
+}
+$('btnGear').addEventListener('click', (e) => {
+  e.stopPropagation();
+  sfx.unlock();
+  openSettings();
 });
 $('btnCloseSet').addEventListener('click', () => { $('settings').classList.add('hidden'); S.paused = false; lastT = performance.now(); if (save.sound) sfx.startMusic(); });
 $('btnHome').addEventListener('click', () => {
   if (S.state === 'play' || S.state === 'boss') { save.coins += S.runCoins; persist(); }
+  // boss already dead but the win panel not shown yet: still bank the reward / next level
+  else if (S.state === 'win' && !S.endShown) { S.endShown = true; finishWin(); }
   showMenu();
   if (save.sound) sfx.startMusic();
 });
@@ -1743,7 +1868,7 @@ window.addEventListener('pointerdown', (e) => {
 window.addEventListener('pointermove', (e) => {
   if (!dragging) return;
   const dx = e.clientX - lastX; lastX = e.clientX;
-  if (S.state === 'play' || S.state === 'boss') squad.tx -= (dx / Math.min(window.innerWidth, 600)) * 13;
+  if (!S.paused && (S.state === 'play' || S.state === 'boss')) squad.tx -= (dx / Math.min(window.innerWidth, 600)) * 13;
 });
 const endDrag = () => { dragging = false; };
 window.addEventListener('pointerup', endDrag);
@@ -1755,7 +1880,7 @@ initBonus({ scene, S, squad, getLV: () => LV, MAT, burst, confetti, sfx, toast, 
 
 // debug / testing hook
 window.__G = {
-  S, squad, get LV() { return LV; }, startRun, showMenu, save, step: update, camera, dims,
+  S, squad, get LV() { return LV; }, startRun, showMenu, save, step: update, camera, dims, renderer, scene,
   setWeapon: (w) => { S.weapon = w; setWeaponVisual(w); },
 };
 

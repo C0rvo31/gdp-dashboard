@@ -18,6 +18,9 @@ const { chromium, devices } = require('playwright');
     ['barrel', 14, 'G => G.LV.rollers.some(r => r.rolling && r.alive && r.z - G.squad.z < 13 && r.z - G.squad.z > 8)'],
     ['snowball', 22, 'G => G.LV.rollers.some(r => r.rolling && r.alive && r.z - G.squad.z < 13 && r.z - G.squad.z > 8)'],
     ['boulder', 31, 'G => G.LV.rollers.some(r => r.rolling && r.alive && r.z - G.squad.z < 13 && r.z - G.squad.z > 8)'],
+    ['coconut', 41, 'G => G.LV.drops.some(c => c.state === "warn" && c.t > c.warn - 0.25)'],
+    ['log', 47, 'G => G.LV.rollers.some(r => r.rolling && r.alive && r.z - G.squad.z < 13 && r.z - G.squad.z > 8)'],
+    ['mud', 42, 'G => G.LV.muds.some(m => m.z - G.squad.z < 10 && m.z - G.squad.z > 4)'],
   ];
   for (const [name, L, cond] of shots) {
     const res = await p.evaluate(`(() => {

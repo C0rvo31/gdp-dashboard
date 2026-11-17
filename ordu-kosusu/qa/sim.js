@@ -42,6 +42,14 @@ const SIM = (opts) => {
         let sc = Math.abs(x - tx) * 0.12 + (inside ? Math.abs(x - q.x) * 0.6 : 0);  // don't swerve while inside a hazard
         for (const w of walls) if (Math.abs(x - w.x) < w.w / 2 + hw) sc += 3 + 4 * w.hp / Math.max(1, w.max);
         for (const r of LV.rollers || []) if (r.alive && r.z > q.z - d.depth - 1 && (r.z - q.z) / (v + (r.rolling ? r.speed : 0)) < 1.3 && Math.abs(x - r.x) < r.w / 2 + hw) sc += 1 + 2 * r.hp / Math.max(1, r.max);
+        // coconut shadows: be clear of the ring when it lands (a human sees the shadow; human-ish bot reacts late)
+        for (const c of LV.drops || []) if (c.state === 'warn') {
+          const rem = Math.max(0, c.warn - c.t);
+          if (opts.human && c.t < 0.35) continue;
+          sc += 14 * ov(x + (q.x - x) * Math.exp(-12 * rem), [c.x - c.r - 0.2, c.x + c.r + 0.2]);
+        }
+        // mud: slows the march, avoid when there's a free lane
+        for (const m of LV.muds || []) if (m.z + m.depth / 2 > q.z - 1 && m.z - m.depth / 2 - q.z < 14) for (const tl of m.tiles) sc += 2 * ov(x, [tl.x - 1.6, tl.x + 1.6]);
         for (const hz of haz) {
           const t0 = (hz.z - hz.half - 0.3 - q.z) / v, t1 = (hz.z + hz.half + 0.3 + d.depth - q.z) / v;
           let o = 0; const N = 10;

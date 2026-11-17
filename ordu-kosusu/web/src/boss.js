@@ -10,6 +10,7 @@ export const BOSSES = {
   sand: { name: 'KUM DEVİ' },
   yeti: { name: 'YETİ' },
   demon: { name: 'ATEŞ İBLİSİ' },
+  gorilla: { name: 'DEV GORİL' },
 };
 
 const C = (g, hex) => { if (g.attributes.uv) g.deleteAttribute('uv'); return tint(g, hex); };
@@ -193,6 +194,51 @@ export function buildBoss(kind) {
     L(armR, oct(0.55, 0, -3.95, 0, ice, 1, 1.8, 1), oct(0.4, 0.35, -3.75, 0.2, 0xb0ecff, 1, 1.9, 1, -0.5), oct(0.38, -0.3, -3.8, -0.2, 0x7fd8ff, 1, 1.8, 1, 0.5),
       oct(0.32, 0, -3.7, 0.42, 0xc8f3ff, 1, 1.8, 1, 0, 0.5), oct(0.3, 0, -3.7, -0.42, 0x9fe6ff, 1, 1.8, 1, 0, -0.5));
     Gw(armR, oct(0.3, 0, -4.0, 0, 0xe6faff, 1, 2.2, 1));
+  } else if (kind === 'gorilla') {
+    const fur = 0x4a4a56, furD = 0x3a3a44, silver = 0x9a9aa6, face = 0x6a5a58, faceD = 0x54464a, stone = 0x8a9488, stoneD = 0x6e786c, moss = 0x4f9a3a, mossL = 0x6cc04c, rune = 0x9aff5a, vineC = 0x3f7a2a;
+    // hunched torso, silver back, big chest
+    L(body, capsule(1.08, 1.0, 0, 3.1, -0.05, fur, 1.32, 1, 1.0), ball(1, 0, 3.95, -0.45, silver, 16, 12, 1.15, 0.7, 0.75),
+      ball(1, 0, 3.15, 0.42, face, 16, 12, 0.92, 1.0, 0.62), ball(1, 0, 2.35, 0.3, faceD, 14, 10, 0.75, 0.45, 0.6));
+    for (let k = 0; k < 10; k++) { const a = Math.PI * 0.6 + (k / 9) * Math.PI * 0.8; L(body, ico(0.36, Math.cos(a) * 1.3, 2.4 + (k % 3) * 0.6, Math.sin(a) * 0.9 - 0.05, k % 2 ? fur : furD, 0)); }
+    // mossy stone chest plate with glowing rune, vine belt
+    L(body, ball(1, 0, 3.55, 0.5, stone, 7, 5, 0.85, 0.6, 0.55), C(new THREE.DodecahedronGeometry(0.5, 0).scale(1.4, 0.35, 0.8).translate(0, 4.05, 0.62), moss),
+      torus(1.26, 0.09, 0, 2.3, 0, vineC, Math.PI / 2, 0, 1, 1, 0.8), ico(0.14, 0.5, 2.25, 1.0, 0xff5a3a, 0), ico(0.12, 0.62, 2.18, 0.95, 0xffd23a, 0));
+    Gw(body, ...[[-1, 1], [1, 1], [-1, -1], [1, -1]].map(([sx, sy]) => box(0.06, 0.34, 0.04, sx * 0.12, 3.55 + sy * 0.12, 1.04, rune, 0, 0, sx * sy * 0.785)), ball(0.07, 0, 3.55, 1.04, rune, 8, 6));
+    // head: brow ridge, sagittal crest, muzzle, glowing eyes, fangs
+    L(body, ball(0.78, 0, 4.72, 0.0, fur, 18, 14), ball(0.55, 0, 5.15, -0.15, furD, 12, 8, 0.6, 1.0, 1.1),
+      ball(1, 0, 4.78, 0.42, face, 16, 12, 0.6, 0.48, 0.5), ball(1, 0, 4.4, 0.5, face, 14, 10, 0.55, 0.38, 0.5),
+      box(0.95, 0.2, 0.3, 0, 5.0, 0.62, faceD), ball(0.07, -0.1, 4.6, 0.98, 0x1a1418, 6, 4), ball(0.07, 0.1, 4.6, 0.98, 0x1a1418, 6, 4),
+      ball(1, 0, 4.32, 0.92, 0x2a1418, 12, 8, 0.28, 0.09, 0.06));
+    for (const s of [-1, 1]) {
+      L(body, ball(0.13, s * 0.25, 4.84, 0.8, 0x1a1418, 10, 8), cone(0.06, 0.24, s * 0.16, 4.3, 0.95, 0xf3ecdc, Math.PI - 0.1), ball(0.15, s * 0.72, 4.82, -0.05, faceD, 8, 6, 0.6, 1, 1));
+    }
+    Gw(body, ball(0.07, -0.25, 4.84, 0.92, 0xd8ff5a, 8, 6), ball(0.07, 0.25, 4.84, 0.92, 0xd8ff5a, 8, 6));
+    // mossy stone pauldrons
+    for (const s of [-1, 1]) {
+      L(body, C(new THREE.DodecahedronGeometry(0.7, 0).scale(1, 0.62, 1).translate(s * 1.45, 4.05, 0), stone), C(new THREE.DodecahedronGeometry(0.6, 0).scale(1.05, 0.3, 1).translate(s * 1.45, 4.42, 0), moss),
+        C(new THREE.DodecahedronGeometry(0.35, 0).translate(s * 1.75, 3.75, 0.35), stoneD), ico(0.12, s * 1.3, 4.6, 0.3, mossL, 0), ico(0.1, s * 1.62, 4.55, -0.25, mossL, 0));
+      L(body, rod([s * 1.0, 4.4, 0.75], [s * 0.2, 2.5, 1.05], 0.07, 0.07, vineC));
+    }
+    // short thick legs
+    for (const [g] of legs) {
+      L(g, capsule(0.48, 0.7, 0, -0.75, 0, fur), ico(0.42, 0, -1.25, 0.1, furD, 0), cyl(0.5, 0.55, 0.6, 0, -1.65, 0, fur, 12),
+        dome(0.58, 0, -2.1, 0.25, face, 14, 8, 1, 0.6, 1.5, 0.5));
+      for (let k = -1; k <= 1; k++) L(g, ball(0.13, k * 0.24, -2.0, 0.95, faceD, 8, 6));
+      L(g, C(new THREE.DodecahedronGeometry(0.32, 0).scale(1, 0.8, 0.6).translate(0, -1.0, 0.42), stone));
+    }
+    // long heavy arms with stone bracers and huge knuckles
+    for (const [g, s] of arms) {
+      L(g, capsule(0.4, 1.0, 0, -0.85, 0, fur), ico(0.38, s * 0.1, -0.5, -0.1, furD, 0), cyl(0.44, 0.4, 0.55, 0, -1.45, 0, stone, 7), cyl(0.46, 0.46, 0.1, 0, -1.25, 0, moss, 7),
+        ball(0.5, 0, -1.98, 0.05, face, 14, 10, 1, 0.9, 1.05));
+      for (let k = -1; k <= 1; k++) L(g, ball(0.14, k * 0.2, -2.12, 0.42, faceD, 8, 6));
+      Gw(g, box(0.06, 0.3, 0.04, s * 0.05, -1.45, 0.43, rune));
+    }
+    // log club with a vine-bound boulder head
+    L(armR, cyl(0.17, 0.2, 2.1, 0, -2.65, 0, 0x6a4a2e, 8), torus(0.2, 0.05, 0, -2.3, 0, vineC, Math.PI / 2), torus(0.2, 0.05, 0, -2.85, 0, vineC, Math.PI / 2),
+      C(new THREE.DodecahedronGeometry(0.72, 0).scale(1.05, 1, 1.15).translate(0, -3.8, 0), stone), C(new THREE.DodecahedronGeometry(0.55, 0).scale(1.2, 0.4, 1.2).translate(0, -3.4, 0), moss),
+      torus(0.7, 0.06, 0, -3.8, 0, vineC, 0, Math.PI / 2), torus(0.68, 0.06, 0, -3.8, 0, vineC, Math.PI / 2 - 0.3));
+    for (const [x, z] of [[0.6, 0.3], [-0.6, -0.2], [0, 0.75], [0, -0.75]]) L(armR, cone(0.1, 0.32, x, -3.85, z, stoneD, z ? Math.sign(z) * Math.PI / 2 : 0, x ? -Math.sign(x) * Math.PI / 2 : 0));
+    Gw(armR, box(0.05, 0.4, 0.05, 0.62, -3.8, 0.18, rune, 0, 0, 0.3), box(0.05, 0.4, 0.05, -0.62, -3.8, -0.1, rune, 0, 0, -0.3));
   } else {
     const skin = 0xc0392b, skinD = 0x8a2418, armor = 0x2a1c22, armorE = 0x4a3238, horn = 0x1a1416, memb = 0x6a1a22, lava = 0xff7a1a, hot = 0xffc23a;
     L(body,
